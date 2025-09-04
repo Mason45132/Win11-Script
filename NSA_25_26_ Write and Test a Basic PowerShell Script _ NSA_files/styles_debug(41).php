@@ -1,0 +1,20 @@
+/** Path: plugin block_lp .' **/
+.block_lp.block .content h3 {
+    padding: 0;
+    text-transform: none;
+}
+
+.block_lp .sub-content {
+    padding: 0 15px;
+}
+
+.block_lp ul {
+    list-style: none;
+    margin: 0;
+}
+
+.block_lp ul .more {
+    padding-top: 10px;
+}
+
+
