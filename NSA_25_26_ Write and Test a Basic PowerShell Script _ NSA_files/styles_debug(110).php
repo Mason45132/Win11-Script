@@ -1,9 +1,0 @@
-/** Path: plugin tiny_accessibilitychecker .' **/
-.warning-desc {
-    word-wrap: break-word;
-}
-
-.warning-desc li {
-    margin-bottom: 10px;
-}
-

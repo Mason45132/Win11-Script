@@ -1,7 +1,0 @@
-/** Path: plugin tiny_equation .' **/
-.tiny_equation_library button {
-    margin: 0.25%;
-    min-width: 10%;
-}
-
-
