@@ -1,3 +1,11 @@
+<# Script to harden Windows 11 systems 
+Mason 
+Demonstrates PowerShell scripting 
+#>
+# Variables Section - Start
+$MaxPasswordAge = 60  # Maximum password age in days
+# Variables Section - End 
+
 # Check if the script is running as Administrator
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "This script must be run as Administrator. Relaunching with elevated privileges..." -ForegroundColor Yellow
@@ -7,13 +15,12 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 # Define menu options
 $menuOptions = @(
-    "Document the system",
-    "Enable updates",
-    "User auditing",
-    "Authorized Administrator",
-    "Account Policies",
-
-    "Exit"
+    "Document the system", # option 1
+    "Enable updates", # option 2
+    "User auditing", # option 3
+    "Authorized Administrator", # option 4
+    "Account Policies", # option 5
+    "Exit" # option 6
 )
 
 function Get-SystemDocumentation {
