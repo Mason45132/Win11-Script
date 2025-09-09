@@ -24,11 +24,10 @@ function enable-updates {
 
 function Invoke-UserAuditing {
     Write-Host "`n--- starting: User auditing ---`n" -ForegroundColor Cyan
-    
+
     # Get all local users except built-in accounts
-    $users = Get-LocalUser | Where-Object { 
-        $_.Name -notin @('Administrator', 'DefaultAccount', 'Guest', 'WDAGUtilityAccount') -and
-        -not $_.PrincipalSource -eq 'MicrosoftAccount'
+    $users = Get-LocalUser | Where-Object {
+        $_.Name -notin @('Administrator', 'DefaultAccount', 'Guest', 'WDAGUtilityAccount')
     }
 
     if (-not $users) {
@@ -41,13 +40,25 @@ function Invoke-UserAuditing {
         Write-Host "User: $($user.Name)" -ForegroundColor Green
         Write-Host "Enabled: $($user.Enabled)" -ForegroundColor Gray
         Write-Host "Last Logon: $($user.LastLogon)" -ForegroundColor Gray
-        
+
         $answer = Read-Host "Is this an authorized user? (Y/n) [Default: $default]"
         if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $default }
-        
+
         if ($answer -match '^[Nn]') {
             Write-Host "`nRemoving unauthorized user '$($user.Name)'..." -ForegroundColor Yellow
             try {
+                # Remove user from all local groups before deletion
+                $groups = Get-LocalGroup | ForEach-Object {
+                    try {
+                        Get-LocalGroupMember -Group $_.Name -Member $user.Name -ErrorAction Stop
+                        $_.Name
+                    } catch {}
+                }
+                foreach ($group in $groups) {
+                    try {
+                        Remove-LocalGroupMember -Group $group -Member $user.Name -ErrorAction Stop
+                    } catch {}
+                }
                 Remove-LocalUser -Name $user.Name -ErrorAction Stop
                 Write-Host "Successfully removed '$($user.Name)'`n" -ForegroundColor Green
             } catch {
