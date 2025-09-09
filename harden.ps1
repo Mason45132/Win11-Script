@@ -10,8 +10,10 @@ $menuOptions = @(
     "Document the system",
     "Enable updates",
     "User auditing",
-    "Exit",
-    "Authorized Administrator"
+    "Authorized Administrator",
+    "Account Policies",
+
+    "Exit"
 )
 
 function Get-SystemDocumentation {
@@ -23,7 +25,7 @@ function enable-updates {
 }
 
 function Invoke-UserAuditing {
-    Write-Host "`n--- starting: User Auditing ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Starting: User Auditing ---`n" -ForegroundColor Cyan
 
     # Get all local users except built-in accounts
     $users = Get-LocalUser | Where-Object {
@@ -102,6 +104,10 @@ function Get-AuthorizedAdministrator {
     }
 }
 
+function Get-AccountPolicies {
+    Write-Host "`n--- Starting: Account Policies ---`n" -ForegroundColor Cyan
+}
+
 # Display menu and handle selection in a loop
 do {
     Write-Host "`nSelect an option:`n"
@@ -115,8 +121,9 @@ do {
         "1" { Get-SystemDocumentation }
         "2" { enable-updates }
         "3" { Invoke-UserAuditing }
-        "4" { Write-Host "`nExiting script..."; exit }
-        "5" { Get-AuthorizedAdministrator }
+        "4" { Get-AuthorizedAdministrator }
+        "5" { Get-AccountPolicies }
+        "6" { Write-Host "`nExiting script..."; exit }
         default { Write-Host "`nInvalid selection. Please try again." }
     }
 } while ($true)
