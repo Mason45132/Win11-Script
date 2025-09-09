@@ -22,7 +22,7 @@ function enable-updates {
     Write-Host "`n--- starting: Enabling updates ---`n"
 }
 
-function user-auditing {
+function Invoke-UserAuditing {
     Write-Host "`n--- starting: User auditing ---`n" -ForegroundColor Cyan
     
     # Get all local users except built-in accounts
@@ -59,7 +59,7 @@ function user-auditing {
     }
 }
 
-function authorized-administrator {
+function Get-AuthorizedAdministrator {
     Write-Host "`n--- starting: Authorized Administrator auditing ---`n" -ForegroundColor Cyan
 
     # Get all users in the Administrators group
@@ -103,10 +103,9 @@ do {
     switch ($selection) {
         "1" { Get-SystemDocumentation }
         "2" { enable-updates }
-        "3" { user-auditing }
+        "3" { Invoke-UserAuditing }
         "4" { Write-Host "`nExiting script..."; exit }
-        "5" { authorized-administrator }
+        "5" { Get-AuthorizedAdministrator }
         default { Write-Host "`nInvalid selection. Please try again." }
     }
 } while ($true)
-# ...exiting code... 
