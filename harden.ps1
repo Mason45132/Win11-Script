@@ -23,7 +23,7 @@ function enable-updates {
 }
 
 function Invoke-UserAuditing {
-    Write-Host "`n--- starting: User auditing ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- starting: User Auditing ---`n" -ForegroundColor Cyan
 
     # Get all local users except built-in accounts
     $users = Get-LocalUser | Where-Object {
@@ -41,7 +41,7 @@ function Invoke-UserAuditing {
         Write-Host "Enabled: $($user.Enabled)" -ForegroundColor Gray
         Write-Host "Last Logon: $($user.LastLogon)" -ForegroundColor Gray
 
-        $answer = Read-Host "Is this an authorized user? (Y/n) [Default: $default]"
+        $answer = Read-Host "Is this an authorized user? (Y/n)"
         if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $default }
 
         if ($answer -match '^[Nn]') {
