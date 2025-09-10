@@ -111,8 +111,17 @@ function Get-AuthorizedAdministrator {
     }
 }
 
-function Get-AccountPolicies {
-    Write-Host "`n--- Starting: Account Policies ---`n" -ForegroundColor Cyan
+function Account-Policies {
+    Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
+
+    # Set the maximum password age using the net accounts command
+    try {
+        Write-Host "Setting Maximum Password Age to $MaxPasswordAge days..." -ForegroundColor Yellow
+        net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
+        Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Maximum Password Age: $_" -ForegroundColor Red
+    }
 }
 
 # Display menu and handle selection in a loop
@@ -125,12 +134,12 @@ do {
     $selection = Read-Host "`nEnter the number of your choice"
 
     switch ($selection) {
-        "1" { Get-SystemDocumentation }
-        "2" { enable-updates }
-        "3" { Invoke-UserAuditing }
-        "4" { Get-AuthorizedAdministrator }
-        "5" { Get-AccountPolicies }
-        "6" { Write-Host "`nExiting script..."; exit }
-        default { Write-Host "`nInvalid selection. Please try again." }
-    }
+    "1" { Get-SystemDocumentation }
+    "2" { enable-updates }
+    "3" { Invoke-UserAuditing }
+    "4" { Get-AuthorizedAdministrator }
+    "5" { Account-Policies }  # Corrected function name
+    "6" { Write-Host "`nExiting script..."; exit }
+    default { Write-Host "`nInvalid selection. Please try again." }
+}
 } while ($true)
