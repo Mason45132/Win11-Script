@@ -246,19 +246,87 @@ function User-Auditing {
 }
 
 function Account-Policies {
-    Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
-
-    # Set the maximum password age using the net accounts command
-    try {
-        Write-Host "Setting Maximum Password Age to $MaxPasswordAge days..." -ForegroundColor Yellow
-        net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
-        Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to set Maximum Password Age: $_" -ForegroundColor Red
-    }
+    Write-Host "`n--- Starting: Account Policies ---`n"
+    Write-Host "Setting maximum password age to $MaxPasswordAge days..."
+    net accounts /maxpwage:$MaxPasswordAge
 }
 
-# Display menu and handle selection in a loop
+function Local-Policies {
+    Write-Host "`n--- Starting: Local Policies ---`n"
+}
+
+function Defensive-Countermeasures {
+    Write-Host "`n--- Starting: Defensive Countermeasures ---`n"
+}
+
+function Uncategorized-OS-Settings {
+    Write-Host "`n--- Starting: Uncategorized OS Settings ---`n"
+}
+
+function Service-Auditing {
+    Write-Host "`n--- Starting: Service Auditing ---`n"
+
+    # Define the services to audit and disable
+    $servicesToAudit = @( "BTAGService", "bthserv", "Browser", "MapsBroker", "lfsvc", "IISADMIN", "irmon", "lltdsvc", 
+    "LxssManager", "FTPSVC", "MSiSCSI", "sshd", "PNRPsvc", "p2psvc", "p2pimsvc", "PNRPAutoReg", 
+    "Spooler", "wercplsupport", "RasAuto", "SessionEnv", "TermService", "UmRdpService", "RpcLocator", 
+    "RemoteRegistry", "RemoteAccess", "LanmanServer", "simptcp", "SNMP", "sacsvr", "SSDPSRV", 
+    "upnphost", "WMSvc", "WerSvc", "Wecsvc", "WMPNetworkSvc", "icssvc", "WpnService", "PushToInstall", 
+    "WinRM", "W3SVC", "XboxGipSvc", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "NetTcpPortSharing",
+    "DNS", "LPDsvc", "RasMan", "SNMPTRAP", "TlntSvr", "TapiSrv", "WebClient", "LanmanWorkstation")
+
+    # Display the current status of the services
+    Write-Host "`nCurrent status of services:`n"
+    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize
+
+    # Loop through each service and attempt to disable it
+    foreach ($service in $servicesToAudit) {
+        try {
+            $svc = Get-Service -Name $service -ErrorAction Stop
+            if ($svc.Status -ne "Stopped") {
+                Stop-Service -Name $service -Force -ErrorAction Stop
+                Write-Host "Stopped service: $service"
+            }
+            Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
+            Write-Host "Disabled service: $service"
+        } catch {
+            Write-Warning "Could not modify $service`: $($_.Exception.Message)"
+        }
+    }
+    
+    # Display the updated status of the services
+    Write-Host "`nUpdated status of services:`n"
+    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize
+}
+
+function OS-Updates {
+    Write-Host "`n--- Starting: OS Updates ---`n"
+}
+
+function Application-Updates {
+    Write-Host "`n--- Starting: Application Updates ---`n"
+}
+
+function Prohibited-Files {
+    Write-Host "`n--- Starting: Prohibited Files ---`n"
+}
+
+function Unwanted-Software {
+    Write-Host "`n--- Starting: Unwanted Software ---`n"
+}
+
+function Malware {
+    Write-Host "`n--- Starting: Malware ---`n"
+}
+
+function Application-Security-Settings {
+    Write-Host "`n--- Starting: Application Security Settings ---`n"
+}
+
+# Define a list to track completed options
+$completedOptions = @()
+
+# Menu loop
 do {
     Write-Host "`nSelect an option:`n"
     for ($i = 0; $i -lt $menuOptions.Count; $i++) {
@@ -274,12 +342,71 @@ do {
     $selection = Read-Host "`nEnter the number of your choice"
 
     switch ($selection) {
-    "1" { Get-SystemDocumentation }
-    "2" { enable-updates }
-    "3" { Invoke-UserAuditing }
-    "4" { Get-AuthorizedAdministrator }
-    "5" { Account-Policies }  # Corrected function name
-    "6" { Write-Host "`nExiting script..."; exit }
-    default { Write-Host "`nInvalid selection. Please try again." }
-}
+        "1"  { 
+            Document-System 
+            $completedOptions += $menuOptions[0]  # Mark as completed
+        }
+        "2"  { 
+            Enable-Updates 
+            $completedOptions += $menuOptions[1]  # Mark as completed
+        }
+        "3"  { 
+            User-Auditing 
+            $completedOptions += $menuOptions[2]  # Mark as completed
+        }
+        "4"  { 
+            Account-Policies 
+            $completedOptions += $menuOptions[3]  # Mark as completed
+        }
+        "5"  { 
+            Local-Policies 
+            $completedOptions += $menuOptions[4]  # Mark as completed
+        }
+        "6"  { 
+            Defensive-Countermeasures 
+            $completedOptions += $menuOptions[5]  # Mark as completed
+        }
+        "7"  { 
+            Uncategorized-OS-Settings 
+            $completedOptions += $menuOptions[6]  # Mark as completed
+        }
+        "8"  { 
+            Service-Auditing 
+            $completedOptions += $menuOptions[7]  # Mark as completed
+        }
+        "9"  { 
+            OS-Updates 
+            $completedOptions += $menuOptions[8]  # Mark as completed
+        }
+        "10" { 
+            Application-Updates 
+            $completedOptions += $menuOptions[9]  # Mark as completed
+        }
+        "11" { 
+            Prohibited-Files 
+            $completedOptions += $menuOptions[10]  # Mark as completed
+        }
+        "12" { 
+            Unwanted-Software 
+            $completedOptions += $menuOptions[11]  # Mark as completed
+        }
+        "13" { 
+            Malware 
+            $completedOptions += $menuOptions[12]  # Mark as completed
+        }
+        "14" { 
+            Application-Security-Settings 
+            $completedOptions += $menuOptions[13]  # Mark as completed
+        }
+        "15" { 
+            Write-Host "`nExiting..." 
+            break menu  # Exit the loop
+        }
+        default { 
+            Write-Host "`nInvalid selection. Please try again." -ForegroundColor $WarningColor
+        }
+    }
 } while ($true)
+# End of script 
+#Changed
+#Chnanged again
