@@ -292,7 +292,7 @@ function Local-Policies {
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
         (Get-Content $exportedFile) `
-            -replace '(SeTrustedCredManAccessPrivilege\s*=\s*).*', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
+            -replace '(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
             -replace '(SeDenyNetworkLogonRight\s*=\s*).*', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
             -replace '(SeCreateTokenPrivilege\s*=\s*).*', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
             -replace '(SeCreateGlobalPrivilege\s*=\s*).*', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
