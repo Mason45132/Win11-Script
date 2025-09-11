@@ -275,7 +275,6 @@ function Local-Policies {
         Write-Host "Failed to back up security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
-
     # Export the current security policy
     Write-Host "Exporting current security policy to: $exportedFile" -ForegroundColor $HeaderColor
     try {
@@ -306,15 +305,17 @@ function Local-Policies {
         Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
+$seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
 
-    # Import the modified security policy
-    Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
-    try {
-        secedit /configure /db secedit.sdb /cfg $modifiedFile /overwrite | Out-Null
-        Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
-    } catch {
-        Write-Host "Failed to import modified security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
-    }
+Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
+
+$seceditOutput = secedit /configure /db $seceditDBPath /cfg $modifiedFile /overwrite 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
+} else {
+    Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
+    Write-Host "Error Output:`n$seceditOutput" -ForegroundColor $WarningColor
+}
 }
 
 function Defensive-Countermeasures {
