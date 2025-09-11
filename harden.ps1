@@ -277,6 +277,9 @@ function Local-Policies {
     Write-Host "Exporting current security policy to: $exportedFile" -ForegroundColor $HeaderColor
     try {
         secedit /export /cfg $exportedFile | Out-Null
+        if (-not (Test-Path -Path $exportedFile)) {
+            throw "Export failed: $exportedFile was not created."
+        }
         Write-Host "Export completed successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
         Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
