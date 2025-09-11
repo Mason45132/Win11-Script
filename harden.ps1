@@ -249,6 +249,18 @@ function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
     Write-Host "Setting maximum password age to $MaxPasswordAge days..."
     net accounts /maxpwage:$MaxPasswordAge
+=======
+    Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
+
+    # Set the maximum password age using the net accounts command
+    try {
+        Write-Host "Setting Maximum Password Age to $MaxPasswordAge days..." -ForegroundColor Yellow
+        net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
+        Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Maximum Password Age: $_" -ForegroundColor Red
+    }
+
 }
 
 function Local-Policies {
@@ -342,6 +354,7 @@ do {
     $selection = Read-Host "`nEnter the number of your choice"
 
     switch ($selection) {
+
         "1"  { 
             Document-System 
             $completedOptions += $menuOptions[0]  # Mark as completed
@@ -407,4 +420,4 @@ do {
         }
     }
 } while ($true)
-# End of script 
+# End of script
