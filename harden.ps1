@@ -309,7 +309,7 @@ $seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
 
 Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
 
-$seceditOutput = secedit /configure /db $seceditDBPath /cfg $modifiedFile /overwrite 2>&1
+secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg "C:\Windows\Security\Temp\secpol_modified.inf" /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
 } else {
