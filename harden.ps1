@@ -252,7 +252,55 @@ function Account-Policies {
 }
 
 function Local-Policies {
-    Write-Host "`n--- Starting: Local Policies ---`n"
+    Write-Host "`n--- Starting: Local Policies ---`n"-ForegroundColor $HeaderColor
+
+# Backup the current security policy
+    $backupFile = "C:\Windows\Security\Backup\secpol_backup.inf"
+    $exportedFile = "C:\Windows\Security\Temp\secpol.inf"
+    $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
+
+    # Ensure backup directory exists
+    if (-not (Test-Path -Path "C:\Windows\Security\Backup")) {
+        New-Item -Path "C:\Windows\Security\Backup" -ItemType Directory | Out-Null
+    }
+
+    Write-Host "Backing up current security policy to: $backupFile" -ForegroundColor $HeaderColor
+    try {
+        secedit /export /cfg $backupFile | Out-Null
+        Write-Host "Backup completed successfully." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to back up security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+
+    # Export the current security policy
+    Write-Host "Exporting current security policy to: $exportedFile" -ForegroundColor $HeaderColor
+    try {
+        secedit /export /cfg $exportedFile | Out-Null
+        Write-Host "Export completed successfully." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+
+    # Modify the SeTakeOwnershipPrivilege assignment
+    Write-Host "Modifying SeTakeOwnershipPrivilege assignment..." -ForegroundColor $HeaderColor
+    try {
+        (Get-Content $exportedFile) -replace '(SeTakeOwnershipPrivilege\s*=\s*).*', 'SeTakeOwnershipPrivilege = *S-1-5-32-544' | Set-Content $modifiedFile
+        Write-Host "Modification completed successfully." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to modify security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+
+    # Import the modified security policy
+    Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
+    try {
+        secedit /configure /db secedit.sdb /cfg $modifiedFile /overwrite | Out-Null
+        Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to import modified security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    }
 }
 
 function Defensive-Countermeasures {
