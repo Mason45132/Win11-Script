@@ -252,16 +252,19 @@ function Account-Policies {
 }
 
 function Local-Policies {
-    Write-Host "`n--- Starting: Local Policies ---`n"-ForegroundColor $HeaderColor
+    Write-Host "`n--- Starting: Local Policies ---`n" -ForegroundColor $HeaderColor
 
-# Backup the current security policy
+    # Backup the current security policy
     $backupFile = "C:\Windows\Security\Backup\secpol_backup.inf"
     $exportedFile = "C:\Windows\Security\Temp\secpol.inf"
     $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
 
-    # Ensure backup directory exists
+    # Ensure backup and temp directories exist
     if (-not (Test-Path -Path "C:\Windows\Security\Backup")) {
         New-Item -Path "C:\Windows\Security\Backup" -ItemType Directory | Out-Null
+    }
+    if (-not (Test-Path -Path "C:\Windows\Security\Temp")) {
+        New-Item -Path "C:\Windows\Security\Temp" -ItemType Directory | Out-Null
     }
 
     Write-Host "Backing up current security policy to: $backupFile" -ForegroundColor $HeaderColor
@@ -286,13 +289,21 @@ function Local-Policies {
         return
     }
 
-    # Modify the SeTakeOwnershipPrivilege assignment
-    Write-Host "Modifying SeTakeOwnershipPrivilege assignment..." -ForegroundColor $HeaderColor
+    # Modify the security privileges
+    Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
-        (Get-Content $exportedFile) -replace '(SeTakeOwnershipPrivilege\s*=\s*).*', 'SeTakeOwnershipPrivilege = *S-1-5-32-544' | Set-Content $modifiedFile
-        Write-Host "Modification completed successfully." -ForegroundColor $EmphasizedNameColor
+        (Get-Content $exportedFile) `
+            -replace '(SeTrustedCredManAccessPrivilege\s*=\s*).*', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
+            -replace '(SeDenyNetworkLogonRight\s*=\s*).*', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
+            -replace '(SeCreateTokenPrivilege\s*=\s*).*', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
+            -replace '(SeCreateGlobalPrivilege\s*=\s*).*', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
+            -replace '(SeRemoteShutdownPrivilege\s*=\s*).*', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
+            -replace '(SeLoadDriverPrivilege\s*=\s*).*', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
+            -replace '(SeSecurityPrivilege\s*=\s*).*', 'SeSecurityPrivilege = *S-1-5-32-544' `
+            | Set-Content $modifiedFile
+        Write-Host "Security privileges modified successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
-        Write-Host "Failed to modify security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
 
