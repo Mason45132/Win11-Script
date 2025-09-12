@@ -559,7 +559,7 @@ function Application-Updates {
                         winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
                         Write-Host "Updated: $id" -ForegroundColor Green
                     } catch {
-                        Write-Host "Failed to update $id: $_" -ForegroundColor Red
+                        Write-Host "Failed to update $id : $_" -ForegroundColor Red
                     }
                 }
             }
