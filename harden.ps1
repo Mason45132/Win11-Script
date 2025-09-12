@@ -569,66 +569,64 @@ function Application-Updates {
     }
 
     try {
-        # Fetch list of updatable appoop
+        # Fetch list of updatable apps
         $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
         if (-not $updates) {
             Write-Host "No application updates available." -ForegroundColor Green
-            return
-        }
-
-        Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
-        winget upgrade
-
-        foreach ($app in $updates) {
-            # Extract app ID (skip headers, match proper entries)
-            if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
-                $id = $matches[1].Trim()
-                $version = $matches[2].Trim()
-                $available = $matches[3].Trim()
-
-                Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
-                $choice = Read-Host "Do you want to update $id? [Y/n]"
-
-                if ($choice -eq 'n' -or $choice -eq 'N') {
-                    Write-Host "Skipped: $id" -ForegroundColor DarkYellow
-                } else {
-                    try {
-                        winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
-                        Write-Host "Updated: $id" -ForegroundColor Green
-                    } catch {
-                        Write-Host "Failed to update $id : $_" -ForegroundColor Red
-                    }
-
-    Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
-
-    try {
-        # Check if Chrome is installed
-        $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
-        if ($chrome) {
-            Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
-            winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
-            Start-Sleep -Seconds 5
         } else {
-            Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
-        }
+            Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
+            winget upgrade
 
-        # Reinstall Chrome
-        Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
-        winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+            foreach ($app in $updates) {
+                # Extract app ID (skip headers, match proper entries)
+                if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+                    $id = $matches[1].Trim()
+                    $version = $matches[2].Trim()
+                    $available = $matches[3].Trim()
 
-        Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
-    }
-    catch {
-        Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
-    }
-}
+                    Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
+                    $choice = Read-Host "Do you want to update $id? [Y/n]"
+
+                    if ($choice -eq 'n' -or $choice -eq 'N') {
+                        Write-Host "Skipped: $id" -ForegroundColor DarkYellow
+                    } else {
+                        try {
+                            winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                            Write-Host "Updated: $id" -ForegroundColor Green
+                        } catch {
+                            Write-Host "Failed to update $id : $_" -ForegroundColor Red
+                        }
+                    }
                 }
             }
+        }
+
+        # 🔽 Reinstall Google Chrome after updates are finished
+        Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
+        try {
+            $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
+            if ($chrome) {
+                Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
+                winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+                Start-Sleep -Seconds 5
+            } else {
+                Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
+            }
+
+            Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
+            winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+            Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
+        }
+        catch {
+            Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
+        }
+
     } catch {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
+
 
 function Prohibited-Files {
     param (
