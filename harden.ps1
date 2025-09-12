@@ -781,7 +781,7 @@ do {
             # Highlight completed options in green
             Write-Host "$($i + 1). $($menuOptions[$i])" -ForegroundColor $EmphasizedNameColor
         } else {
-            # Display incomplete options in default color
+            # Display incomplete options in default colors
             Write-Host "$($i + 1). $($menuOptions[$i])"
         }
     }
