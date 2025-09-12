@@ -452,7 +452,7 @@ function Service-Auditing {
         }
     }
     
-    # Display the updated status of the services
+    # Display the updated status of the service
     Write-Host "`nUpdated status of services:`n"
     Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize
 }
