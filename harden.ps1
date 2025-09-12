@@ -500,7 +500,7 @@ function OS-Updates {
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-#gdsvgg
+#gdsvgglolo
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
 
