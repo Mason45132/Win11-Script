@@ -569,7 +569,7 @@ function Application-Updates {
     }
 
     try {
-        # Fetch list of updatable apps
+        # Fetch list of updatable app
         $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
         if (-not $updates) {
