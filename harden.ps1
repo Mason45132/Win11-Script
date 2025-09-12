@@ -673,7 +673,6 @@ function Application-Security-Settings {
 }
 
 
-
 # Define a list to track completed options
 $completedOptions = @()
 
