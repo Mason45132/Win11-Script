@@ -511,7 +511,7 @@ try {
 
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
-#gdsv
+#gdsvgg
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
 
