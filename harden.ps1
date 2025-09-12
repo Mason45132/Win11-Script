@@ -289,7 +289,9 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "Error Output:`n$seceditOutput" -ForegroundColor $WarningColor
 }
 }
-
+function Local-Policies {
+    Write-Host "`n--- Starting: Local-Policies ---`n"
+}
 function Defensive-Countermeasures {
     Write-Host "`n--- Starting: Defensive Countermeasures ---`n"
 }
