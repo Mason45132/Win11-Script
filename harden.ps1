@@ -569,7 +569,7 @@ function Application-Updates {
     }
 
     try {
-        # Fetch list of updatable apps
+        # Fetch list of updatable appoop
         $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
         if (-not $updates) {
@@ -726,9 +726,20 @@ function Application-Security-Settings {
         Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
         Set-MpPreference -EnableControlledFolderAccess Enabled
 
-        # Disallow unsigned PowerShell scripts
-        Write-Host "Enforcing signed PowerShell scripts only..." -ForegroundColor Yellow
-        Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
+        # Disallow unsigned PowerShell scripts (only if not overridden by Group Policy)
+        try {
+            $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
+            if ($currentPolicy -ne "AllSigned") {
+                Write-Host "Setting PowerShell execution policy to AllSigned..." -ForegroundColor Yellow
+                Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
+                Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
+            } else {
+                Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
+            }
+        }
+        catch {
+            Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
+        }
 
         # Disable Windows Optional Features not needed
         Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
@@ -753,9 +764,10 @@ function Application-Security-Settings {
     }
 }
 
-# Function is now defined but NOT executed automatically.
-# To run it, the user can call:
+# Function is now defined but NOT executed automatically
+# To run it manually, type:
 # Application-Security-Settings
+
 
 
 # Define a list to track completed options
@@ -849,3 +861,4 @@ do {
 #change
 #merge
 #YIPPIE
+#yo
