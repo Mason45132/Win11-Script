@@ -497,7 +497,71 @@ function OS-Updates {
 }
 
 function Application-Updates {
-    Write-Host "`n--- Starting: Application Updates ---`n"
+    Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
+
+    # Check if winget is available
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Host "Winget is not available on this system. Application updates cannot proceed." -ForegroundColor $WarningColor
+        return
+    }
+
+    try {
+        # Get list of upgradable apps as raw text
+        $updates = winget upgrade | Select-String -Pattern '^\s*\S+' | ForEach-Object { $_.ToString().Trim() }
+
+        if (-not $updates -or $updates.Count -eq 0) {
+            Write-Host "No application updates available." -ForegroundColor $EmphasizedNameColor
+            return
+        }
+
+        Write-Host "`nFound the following application updates:" -ForegroundColor $PromptColor
+        $parsedUpdates = @()
+
+        foreach ($line in $updates) {
+            if ($line -match '^(?<Name>.+?)\s{2,}(\d{1,5})\s+(?<Version>\S+)\s+(?<Available>\S+)\s+(?<Source>\S+)$') {
+                $parsedUpdates += [PSCustomObject]@{
+                    Name      = $matches['Name'].Trim()
+                    Id        = $matches[2]
+                    Version   = $matches['Version']
+                    Available = $matches['Available']
+                    Source    = $matches['Source']
+                }
+            }
+        }
+
+        if ($parsedUpdates.Count -eq 0) {
+            Write-Host "No properly formatted updates found." -ForegroundColor $WarningColor
+            return
+        }
+
+        # Prompt before installing each update
+        foreach ($app in $parsedUpdates) {
+            Write-Host "`nUpdate available for: $($app.Name)" -ForegroundColor $PromptColor
+            Write-Host "Current Version: $($app.Version), Available: $($app.Available)" -ForegroundColor $KeptLineColor
+            $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
+
+            if ($answer -eq 'n' -or $answer -eq 'N') {
+                Write-Host "Skipped update for: $($app.Name)" -ForegroundColor $RemovedLineColor
+                continue
+            }
+
+            try {
+                Write-Host "Installing update for: $($app.Name)" -ForegroundColor $EmphasizedNameColor
+                winget upgrade --id "$($app.Id)" --silent --accept-package-agreements --accept-source-agreements
+                Write-Host "Updated: $($app.Name)" -ForegroundColor $KeptLineColor
+            }
+            catch {
+                Write-Host "Failed to update $($app.Name): $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        }
+
+        Write-Host "`nApplication update process complete." -ForegroundColor $HeaderColor
+
+    } # End of main try block
+
+    catch {
+        Write-Host "Failed to retrieve application updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    }
 }
 
 function Prohibited-Files {
@@ -599,7 +663,8 @@ do {
             Write-Host "`nInvalid selection. Please try again." -ForegroundColor $WarningColor
         }
     }
-} while ($true)
+}
+ while ($true)
 # End of script 
 #Changed
 #Chnanged again
