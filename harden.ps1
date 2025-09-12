@@ -347,7 +347,7 @@ function Account-Policies {
         return
     }
 }
-function Local-Policies {}
+function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
     # Define paths for security config files
 $exportedFile = "C:\Windows\Security\Temp\secpol_original.inf"
@@ -367,7 +367,7 @@ try {
     Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
     return
 }
-
+}
     # Modify the security privileges
     function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
@@ -528,7 +528,7 @@ function OS-Updates {
         
         # Since this is a standalone workstation, reboot automatically
         Write-Host "Rebooting system in 60 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 60 /c "Rebooting to finish Windows Updates"
+        shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
         Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
