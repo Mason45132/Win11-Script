@@ -260,6 +260,9 @@ function Account-Policies {
         Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
+}
+function Local-Policies {
+    Write-Host "`n--- Starting: Local-Policies ---`n"
     # Modify the security privileges
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
@@ -288,9 +291,6 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
     Write-Host "Error Output:`n$seceditOutput" -ForegroundColor $WarningColor
 }
-}
-function Local-Policies {
-    Write-Host "`n--- Starting: Local-Policies ---`n"
 }
 function Defensive-Countermeasures {
     Write-Host "`n--- Starting: Defensive Countermeasures ---`n"
