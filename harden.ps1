@@ -751,11 +751,12 @@ function Application-Security-Settings {
         Write-Host "Enabling SmartScreen for Windows..." -ForegroundColor Yellow
         Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
 
-        # Enable Controlled Folder Access (Protect user files from ransomware)
+        # Enable Controlled Folder Access
         Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
         Set-MpPreference -EnableControlledFolderAccess Enabled
 
-        # Disallow unsigned PowerShell scripts (only if not overridden by Group Policy)
+        # Disallow unsigned PowerShell scripts (try/catch inside)
+        Write-Host "Checking PowerShell execution policy..." -ForegroundColor Yellow
         try {
             $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
             if ($currentPolicy -ne "AllSigned") {
@@ -770,10 +771,7 @@ function Application-Security-Settings {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
 
-        # Disable unnecessary optional Windows features
-        Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
-
-        # --- Find and automatically delete Internet Explorer ---
+        # --- Remove Internet Explorer ---
         Write-Host "Checking for Internet Explorer installation..." -ForegroundColor Yellow
         $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
         if ($ieFeature -and $ieFeature.State -eq "Enabled") {
@@ -795,15 +793,12 @@ function Application-Security-Settings {
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1 -Type DWord
         Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
 
-        Write-Host "`nApplication security settings applied successfully. A restart will now occur." -ForegroundColor Green
+        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
     }
     catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
 }
-
-# To run it manually:
-# Application-Security-Settings
 
 
         catch {
