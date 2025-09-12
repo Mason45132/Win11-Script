@@ -247,47 +247,19 @@ function User-Auditing {
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
-    Write-Host "Setting maximum password age to $MaxPasswordAge days..."
+    Write-Host "Setting maximum password age to $MaxPasswordAge days..." #1CyberPatriot!
     net accounts /maxpwage:$MaxPasswordAge
-}
+    Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
 
-function Local-Policies {
-    Write-Host "`n--- Starting: Local Policies ---`n" -ForegroundColor $HeaderColor
-
-    # Backup the current security policy
-    $backupFile = "C:\Windows\Security\Backup\secpol_backup.inf"
-    $exportedFile = "C:\Windows\Security\Temp\secpol.inf"
-    $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
-
-    # Ensure backup and temp directories exist
-    if (-not (Test-Path -Path "C:\Windows\Security\Backup")) {
-        New-Item -Path "C:\Windows\Security\Backup" -ItemType Directory | Out-Null
-    }
-    if (-not (Test-Path -Path "C:\Windows\Security\Temp")) {
-        New-Item -Path "C:\Windows\Security\Temp" -ItemType Directory | Out-Null
-    }
-
-    Write-Host "Backing up current security policy to: $backupFile" -ForegroundColor $HeaderColor
+    # Set the maximum password age using the net accounts command
     try {
-        secedit /export /cfg $backupFile | Out-Null
-        Write-Host "Backup completed successfully." -ForegroundColor $EmphasizedNameColor
-    } catch {
-        Write-Host "Failed to back up security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
-        return
-    }
-    # Export the current security policy
-    Write-Host "Exporting current security policy to: $exportedFile" -ForegroundColor $HeaderColor
-    try {
-        secedit /export /cfg $exportedFile | Out-Null
-        if (-not (Test-Path -Path $exportedFile)) {
-            throw "Export failed: $exportedFile was not created."
-        }
-        Write-Host "Export completed successfully." -ForegroundColor $EmphasizedNameColor
+        Write-Host "Setting Maximum Password Age to $MaxPasswordAge days..." -ForegroundColor Yellow
+        net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
+        Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
     } catch {
         Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
-
     # Modify the security privileges
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
