@@ -668,19 +668,8 @@ function Unwanted-Software {
 }
 
 function Malware {
-    Write-Host "Starting full Windows Defender scan..." -ForegroundColor Cyan
-
-    # Run full scan
-    Start-MpScan -ScanType FullScan
-
-    Write-Host "Full scan initiated. Opening Windows Security app..." -ForegroundColor Cyan
-
-    # Open Windows Security app
-    Start-Process "ms-settings:windowsdefender"
-
-    Write-Host "Windows Security app opened. Please check scan results and take any necessary action." -ForegroundColor Green
+    Write-Host "`n--- Starting: Malware ---`n"
 }
-
 #local policies
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
@@ -739,11 +728,12 @@ function Application-Security-Settings {
     }
 }
 
-# Run the function
-Application-Security-Settings
+# Function is now defined but NOT executed automatically.
+# To run it, the user can call:
+# Application-Security-Settings
 
 
-# Define a list to track completed option
+# Define a list to track completed options
 $completedOptions = @()
 
 # Menu loop
@@ -834,6 +824,3 @@ do {
 #change
 #merge
 #YIPPIE
-#woot
-#um
-#ru
