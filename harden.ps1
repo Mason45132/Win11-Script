@@ -247,9 +247,8 @@ function User-Auditing {
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
-    Write-Host "Setting maximum password age to $MaxPasswordAge days..."
+    Write-Host "Setting maximum password age to $MaxPasswordAge days..." #1CyberPatriot!
     net accounts /maxpwage:$MaxPasswordAge
-=======
     Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
 
     # Set the maximum password age using the net accounts command
@@ -261,7 +260,6 @@ function Account-Policies {
         Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
-
     # Modify the security privileges
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
