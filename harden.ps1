@@ -766,8 +766,8 @@ function Application-Security-Settings {
             } else {
                 Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
             }
-        }
-        catch {
+            
+        } catch {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
 
@@ -794,8 +794,8 @@ function Application-Security-Settings {
         Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
 
         Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
-    }
-    catch {
+
+    } catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
 }
