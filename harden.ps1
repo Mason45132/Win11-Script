@@ -276,7 +276,7 @@ function User-Auditing {
     $adminGroup = Get-LocalGroupMember -Group "Administrators"
 
     foreach ($admin in $adminGroup) {
-        # Only process user accounts (not groups or service accounts)
+        # Only process user accounts (not groups or service accounts) 
         if ($admin.ObjectClass -ne 'User') {
             continue
         }
@@ -295,6 +295,40 @@ function User-Auditing {
             Write-Host "Kept administrator: $($admin.Name)" -ForegroundColor $KeptLineColor
         }
     }
+    # === Prompt to add new users ===
+do {
+    Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $addUserAnswer = Read-Host
+
+    if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
+        $newUsername = Read-Host "Enter the new username"
+        $newFullName = Read-Host "Enter the user's full name (can be blank)"
+
+        try {
+            # Create new local user
+            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+            Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
+
+            # Force password change at next login
+            net user $newUsername /logonpasswordchg:yes
+            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
+
+            # Ask to add to Administrators group
+            $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+            if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
+                Add-LocalGroupMember -Group "Administrators" -Member $newUsername
+                Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
+            } else {
+                Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
+            }
+        } catch {
+            Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    }
+} while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
+
+    Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
 
 function Account-Policies {
