@@ -517,7 +517,7 @@ try {
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
 
-    # Check if winget is available
+    # Check if winget is availabler
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Host "Winget is not available on this system. Application updates cannot proceed." -ForegroundColor $WarningColor
         return
