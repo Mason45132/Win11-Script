@@ -471,47 +471,45 @@ function OS-Updates {
         return
     }
 
-    # Try PSWindowsUpdate module first
-    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-        try {
-            Write-Host "Installing PSWindowsUpdate module..." -ForegroundColor $PromptColor
-            Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
-            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
-            Write-Host "PSWindowsUpdate module installed successfully." -ForegroundColor $EmphasizedNameColor
-        } catch {
-            Write-Host "Could not install PSWindowsUpdate module, falling back to UsoClient." -ForegroundColor $WarningColor
-        }
+    # Create DOCS folder for logging
+    $desktopFolder = [Environment]::GetFolderPath("Desktop")
+    $docsFolder = Join-Path $desktopFolder "DOCS"
+    if (-not (Test-Path $docsFolder)) {
+        New-Item -Path $docsFolder -ItemType Directory -Force | Out-Null
     }
-
-    if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
-        Import-Module PSWindowsUpdate
-        try {
-            Write-Host "Checking for updates..." -ForegroundColor $PromptColor
-            $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -IgnoreReboot
-            if ($updates) {
-                Write-Host "Installing updates..." -ForegroundColor $PromptColor
-                Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -AutoReboot
-            } else {
-                Write-Host "No updates available." -ForegroundColor $EmphasizedNameColor
-            }
-        } catch {
-            Write-Host "Error installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    $updatesFile = Join-Path $docsFolder "AvailableUpdates.txt"
+# Try PSWindowsUpdate module first (non-blocking audit only)
+if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+    Import-Module PSWindowsUpdate -ErrorAction SilentlyContinue
+    try {
+        Write-Host "Checking for updates using PSWindowsUpdate..." -ForegroundColor $PromptColor
+        $updates = Get-WindowsUpdate -MicrosoftUpdate -IgnoreReboot -ErrorAction Stop
+        if ($updates -and $updates.Count -gt 0) {
+            $updates | Select-Object KB, Title, Size, IsDownloaded, IsInstalled |
+                Format-Table -AutoSize | Out-String | Set-Content $updatesFile
+            Write-Host "Updates documented at: $updatesFile" -ForegroundColor $PromptColor
+        } else {
+            Write-Host "No updates found via PSWindowsUpdate." -ForegroundColor $EmphasizedNameColor
         }
-    } else {
-        # Fallback: Use built-in UsoClient commands
-        Write-Host "Using UsoClient for updates..." -ForegroundColor $PromptColor
-        try {
-            UsoClient StartScan
-            UsoClient StartDownload
-            UsoClient StartInstall
-            UsoClient RestartDevice
-            Write-Host "Updates triggered via UsoClient." -ForegroundColor $EmphasizedNameColor
-        } catch {
-            Write-Host "UsoClient failed to run: $($_.Exception.Message)" -ForegroundColor $WarningColor
-        }
+    } catch {
+        Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
+} else {
+    Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
+}
 
-    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
+# Always trigger background install with UsoClient (non-blocking)
+Write-Host "Triggering updates via UsoClient..." -ForegroundColor $PromptColor
+try {
+    UsoClient StartScan
+    UsoClient StartDownload
+    UsoClient StartInstall
+    Write-Host "Updates triggered. Windows may reboot automatically if needed." -ForegroundColor $EmphasizedNameColor
+} catch {
+    Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
+}
+
+Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
 function Application-Updates {
