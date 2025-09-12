@@ -485,7 +485,7 @@ function OS-Updates {
         try {
             Write-Host "Checking for updates using PSWindowsUpdate..." -ForegroundColor $PromptColor
             $updates = Get-WindowsUpdate -MicrosoftUpdate -IgnoreReboot -ErrorAction Stop
-            if ($updates -and $updates.Count -gt 0) {
+            if ($updates -and $updates.Count -gt 0) 
                 $updates | Select-Object KB, Title, Size, IsDownloaded, IsInstalled |
                     Format-Table -AutoSize | Out-String | Set-Content $updatesFile
                 Write-Host "Updates documented at: $updatesFile" -ForegroundColor $PromptColor
@@ -494,7 +494,6 @@ function OS-Updates {
             }
         } catch {
             Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
-        }
     } else {
         Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
     }
