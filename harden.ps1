@@ -621,7 +621,20 @@ function Prohibited-Files {
                 $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue
                 if ($foundFiles) {
                     Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
-                    $foundFiles | ForEach-Object { Write-Host $_.FullName }
+                    foreach ($file in $foundFiles) {
+                        Write-Host $file.FullName -ForegroundColor Yellow
+                        $response = Read-Host "Do you want to delete this file? (Y/N)"
+                        if ($response -match '^[Yy]$') {
+                            try {
+                                Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                                Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                            } catch {
+                                Write-Warning "Failed to delete $($file.FullName): $_"
+                            }
+                        } else {
+                            Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
+                        }
+                    }
                 } else {
                     Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor Green
                 }
@@ -632,6 +645,7 @@ function Prohibited-Files {
     }
     Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
 }
+
 
 function Unwanted-Software {
     Write-Host "`n--- Starting: Unwanted Software ---`n" -ForegroundColor $HeaderColor
