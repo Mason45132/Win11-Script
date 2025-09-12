@@ -528,7 +528,7 @@ function OS-Updates {
         
         # Since this is a standalone workstation, reboot automatically
         Write-Host "Rebooting system in 60 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 60 /c "Rebooting to finish Windows Updates"
+        shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
         Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
@@ -696,8 +696,8 @@ function Malware {
         Write-Host "Ensuring real-time protection is enabled..." -ForegroundColor Yellow
         Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
-        # Run full system scan
-        Write-Host "Running full system scan. This may take some time..." -ForegroundColor Yellow
+        # Run quick system scan
+        Write-Host "Running quick system scan. This may take some time..." -ForegroundColor Yellow
         Start-MpScan -ScanType QuickScan 
 
         # Get detected threats
