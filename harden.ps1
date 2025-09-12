@@ -827,11 +827,11 @@ function Application-Security-Settings {
         Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
 
         Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
-    }
+    
     catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}
+
 
 # Function is now defined but NOT executed automatically
 # To run it manually, type:
