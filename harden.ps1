@@ -301,7 +301,7 @@ function Uncategorized-OS-Settings {
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
 
-    # Define the services to audit and disable
+    # Define the services to audit and disabled
     $servicesToAudit = @( "BTAGService", "bthserv", "Browser", "MapsBroker", "lfsvc", "IISADMIN", "irmon", "lltdsvc", 
     "LxssManager", "FTPSVC", "MSiSCSI", "sshd", "PNRPsvc", "p2psvc", "p2pimsvc", "PNRPAutoReg", 
     "Spooler", "wercplsupport", "RasAuto", "SessionEnv", "TermService", "UmRdpService", "RpcLocator", 
@@ -353,7 +353,7 @@ function Unwanted-Software {
 function Malware {
     Write-Host "`n--- Starting: Malware ---`n"
 }
-
+#local policies
 function Application-Security-Settings {
     Write-Host "`n--- Starting: Application Security Settings ---`n"
 }
