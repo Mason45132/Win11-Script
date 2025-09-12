@@ -347,7 +347,7 @@ function Account-Policies {
         return
     }
 }
-function Local-Policies {
+function Local-Policies {}
     Write-Host "`n--- Starting: Local-Policies ---`n"
     # Define paths for security config files
 $exportedFile = "C:\Windows\Security\Temp\secpol_original.inf"
@@ -369,6 +369,22 @@ try {
 }
 
     # Modify the security privileges
+    function Local-Policies {
+    Write-Host "`n--- Starting: Local-Policies ---`n"
+
+    # Paths for exported and modified security templates
+    $exportedFile = "C:\Windows\Security\Temp\secpol_export.inf"
+    $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
+
+    # Make sure the folder exists
+    if (-not (Test-Path "C:\Windows\Security\Temp")) {
+        New-Item -Path "C:\Windows\Security\Temp" -ItemType Directory -Force | Out-Null
+    }
+
+    # Export the current security policy
+    Write-Host "Exporting current security policy..." -ForegroundColor $HeaderColor
+    secedit /export /cfg $exportedFile /quiet
+
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
         (Get-Content $exportedFile) `
