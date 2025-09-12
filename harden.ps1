@@ -720,7 +720,7 @@ function Application-Security-Settings {
 Application-Security-Settings
 
 
-# Define a list to track completed options
+# Define a list to track completed option
 $completedOptions = @()
 
 # Menu loop
