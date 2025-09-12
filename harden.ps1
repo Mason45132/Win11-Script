@@ -471,7 +471,7 @@ function OS-Updates {
         return
     }
 
-    # Create DOCS folder for logging
+    # Create DOCS folder for logs
     $desktopFolder = [Environment]::GetFolderPath("Desktop")
     $docsFolder = Join-Path $desktopFolder "DOCS"
     if (-not (Test-Path $docsFolder)) {
@@ -494,7 +494,6 @@ if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
     } catch {
         Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
-}
 } else {
     Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
 }
@@ -510,7 +509,7 @@ try {
     Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
 }
 
-Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
 function Application-Updates {
