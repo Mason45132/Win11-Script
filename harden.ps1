@@ -608,8 +608,31 @@ function Application-Updates {
 }
 
 function Prohibited-Files {
-    Write-Host "`n--- Starting: Prohibited Files ---`n"
+    param (
+        [string[]]$PathsToCheck = @("C:\Users"),
+        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr")
+    )
+
+    Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
+
+    foreach ($path in $PathsToCheck) {
+        foreach ($pattern in $ProhibitedPatterns) {
+            try {
+                $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue
+                if ($foundFiles) {
+                    Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
+                    $foundFiles | ForEach-Object { Write-Host $_.FullName }
+                } else {
+                    Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor Green
+                }
+            } catch {
+                Write-Warning "Error scanning $path for pattern $pattern : $_"
+            }
+        }
+    }
+    Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
 }
+
 function Unwanted-Software {
     Write-Host "`n--- Starting: Unwanted Software ---`n" -ForegroundColor $HeaderColor
 
