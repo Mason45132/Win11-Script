@@ -424,7 +424,63 @@ function Service-Auditing {
 }
 
 function OS-Updates {
-    Write-Host "`n--- Starting: OS Updates ---`n"
+    function OS-Updates {
+    Write-Host "`n--- Starting: OS Updates ---`n" -ForegroundColor $HeaderColor
+
+    # Re-enable Windows Update service
+    try {
+        Write-Host "Re-enabling Windows Update service (wuauserv)..." -ForegroundColor $PromptColor
+        Set-Service -Name wuauserv -StartupType Automatic -ErrorAction Stop
+        Start-Service -Name wuauserv -ErrorAction Stop
+        Write-Host "Windows Update service is enabled and running." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to enable Windows Update service: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+
+    # Try PSWindowsUpdate module first
+    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+        try {
+            Write-Host "Installing PSWindowsUpdate module..." -ForegroundColor $PromptColor
+            Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
+            Write-Host "PSWindowsUpdate module installed successfully." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "Could not install PSWindowsUpdate module, falling back to UsoClient." -ForegroundColor $WarningColor
+        }
+    }
+
+    if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+        Import-Module PSWindowsUpdate
+        try {
+            Write-Host "Checking for updates..." -ForegroundColor $PromptColor
+            $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -IgnoreReboot
+            if ($updates) {
+                Write-Host "Installing updates..." -ForegroundColor $PromptColor
+                Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -AutoReboot
+            } else {
+                Write-Host "No updates available." -ForegroundColor $EmphasizedNameColor
+            }
+        } catch {
+            Write-Host "Error installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    } else {
+        # Fallback: Use built-in UsoClient commands
+        Write-Host "Using UsoClient for updates..." -ForegroundColor $PromptColor
+        try {
+            UsoClient StartScan
+            UsoClient StartDownload
+            UsoClient StartInstall
+            UsoClient RestartDevice
+            Write-Host "Updates triggered via UsoClient." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "UsoClient failed to run: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    }
+
+    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
+}
+
 }
 
 function Application-Updates {
