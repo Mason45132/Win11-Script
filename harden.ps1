@@ -682,8 +682,19 @@ function Unwanted-Software {
 }
 
 function Malware {
-    Write-Host "`n--- Starting: Malware ---`n"
+    Write-Host "Starting full Windows Defender scan..." -ForegroundColor Cyan
+
+    # Run full scan
+    Start-MpScan -ScanType FullScan
+
+    Write-Host "Full scan initiated. Opening Windows Security app..." -ForegroundColor Cyan
+
+    # Open Windows Security app
+    Start-Process "ms-settings:windowsdefender"
+
+    Write-Host "Windows Security app opened. Please check scan results and take any necessary action." -ForegroundColor Green
 }
+
 #local policie
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
