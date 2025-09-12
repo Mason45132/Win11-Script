@@ -755,7 +755,7 @@ function Application-Security-Settings {
         Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
         Set-MpPreference -EnableControlledFolderAccess Enabled
 
-        # Disallow unsigned PowerShell scripts (try/catch inside)
+        # Disallow unsigned PowerShell scripts (own try/catch block)
         Write-Host "Checking PowerShell execution policy..." -ForegroundColor Yellow
         try {
             $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
@@ -763,11 +763,12 @@ function Application-Security-Settings {
                 Write-Host "Setting PowerShell execution policy to AllSigned..." -ForegroundColor Yellow
                 Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
                 Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
-            } else {
+            }
+            else {
                 Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
             }
-            
-        } catch {
+        }
+        catch {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
 
@@ -777,9 +778,11 @@ function Application-Security-Settings {
         if ($ieFeature -and $ieFeature.State -eq "Enabled") {
             Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor Red
             Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction SilentlyContinue
-        } elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
+        }
+        elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
             Write-Host "Internet Explorer is already disabled." -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "Internet Explorer feature not found on this system." -ForegroundColor Green
         }
 
@@ -794,38 +797,11 @@ function Application-Security-Settings {
         Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
 
         Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
-
-    } catch {
-        Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}
-
-
-        catch {
-            Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
-        }
-
-        # Disable Windows Optional Features not needed
-        Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
-
-        # Remove Internet Explorer if installed
-        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
-        if ($ieFeature.State -eq "Enabled") {
-            Write-Host "Internet Explorer is installed. Attempting to uninstall..." -ForegroundColor Yellow
-            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -NoRestart -ErrorAction SilentlyContinue
-            Write-Host "Internet Explorer has been uninstalled. A restart is required to complete removal." -ForegroundColor Green
-        } else {
-            Write-Host "Internet Explorer is not installed or already disabled." -ForegroundColor Green
-        }
-
-        # Disable SMB1 protocol
-        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
-
-        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
-    
     catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
+}
 
 
 # Function is now defined but NOT executed automatically
