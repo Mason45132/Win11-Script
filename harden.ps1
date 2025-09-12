@@ -510,7 +510,7 @@ function Application-Updates {
         Write-Host "Attempting to install Winget via Microsoft Store..." -ForegroundColor $PromptColor
 
         try {
-            # Try to launch App Installer page in Microsoft Store
+            # Launch App Installer page in Microsoft Store
             Start-Process "ms-windows-store://pdp/?productid=9NBLGGH4NNS1" -WindowStyle Normal
             Write-Host "`n[!] Please install 'App Installer' from the Microsoft Store window that just opened." -ForegroundColor $EmphasizedNameColor
             Write-Host "After installation completes, press Enter to continue..." -ForegroundColor $PromptColor
@@ -519,49 +519,45 @@ function Application-Updates {
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 Write-Host "✅ Winget is now installed!" -ForegroundColor $KeptLineColor
             } else {
-                Write-Host "Winget still not found. Please install manually and re-run this option." -ForegroundColor $WarningColor
+                Write-Host "❌ Winget still not found. Please install manually and re-run this option." -ForegroundColor $WarningColor
                 return
             }
         } catch {
-            Write-Host "Automatic install failed. You can manually install Winget from:" -ForegroundColor $WarningColor
+            Write-Host "❌ Automatic install failed. You can manually install Winget from:" -ForegroundColor $WarningColor
             Write-Host "https://github.com/microsoft/winget-cli/releases" -ForegroundColor $KeptLineColor
             return
         }
     }
 
-    # Proceed with updates if winget is available
+    # Proceed with updates
     Write-Host "`nChecking for available application updates..." -ForegroundColor $PromptColor
 
     try {
+        # Check for updates
         $updates = winget upgrade --source winget | Select-String '^[^>]+ +[^\s]+ +[^\s]+$' | ForEach-Object {
             $line = ($_ -replace '\s{2,}', '|') -split '\|'
             [PSCustomObject]@{
-                Name        = $line[0].Trim()
-                ID          = $line[1].Trim()
-                Version     = $line[2].Trim()
+                Name    = $line[0].Trim()
+                ID      = $line[1].Trim()
+                Version = $line[2].Trim()
             }
         }
 
         if ($updates.Count -eq 0) {
-            Write-Host "✅ All applications are up to date." -ForegroundColor $EmphasizedNameColor
+            Write-Host "✅ All applications are already up to date." -ForegroundColor $EmphasizedNameColor
             return
         }
 
+        # Automatically update all apps
         foreach ($app in $updates) {
-            Write-Host "`nUpdate available: $($app.Name) ($($app.ID)) - Current Version: $($app.Version)" -ForegroundColor $PromptColor
-            $answer = Read-Host "Do you want to update this application? [Y/n]"
-
-            if ($answer -eq 'n' -or $answer -eq 'N') {
-                Write-Host "Skipped: $($app.Name)" -ForegroundColor $RemovedLineColor
-            } else {
-                Write-Host "Updating: $($app.Name)..." -ForegroundColor $EmphasizedNameColor
-                winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements
-            }
+            Write-Host "`nUpdating: $($app.Name) ($($app.ID))..." -ForegroundColor $EmphasizedNameColor
+            winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements | Out-Null
+            Write-Host "✔ Updated: $($app.Name)" -ForegroundColor $KeptLineColor
         }
 
         Write-Host "`n✅ Application update process completed." -ForegroundColor $EmphasizedNameColor
     } catch {
-        Write-Host "An error occurred while checking or installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "❌ An error occurred while checking or installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 }
 
