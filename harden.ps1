@@ -599,7 +599,7 @@ function Application-Updates {
                     } catch {
                         Write-Host "Failed to update $id : $_" -ForegroundColor Red
                     }
-                    function Reinstall-GoogleChrome {
+
     Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
 
     try {
@@ -625,7 +625,6 @@ function Application-Updates {
 }
                 }
             }
-        }
     } catch {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
