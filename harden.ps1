@@ -510,7 +510,7 @@ function Application-Updates {
         Write-Host "Attempting to install Winget via Microsoft Store..." -ForegroundColor $PromptColor
 
         try {
-            # Launch App Installer page in Microsoft Store
+            # Open Microsoft Store to App Installer page
             Start-Process "ms-windows-store://pdp/?productid=9NBLGGH4NNS1" -WindowStyle Normal
             Write-Host "`n[!] Please install 'App Installer' from the Microsoft Store window that just opened." -ForegroundColor $EmphasizedNameColor
             Write-Host "After installation completes, press Enter to continue..." -ForegroundColor $PromptColor
@@ -528,12 +528,13 @@ function Application-Updates {
             return
         }
     }
+}
 
     Write-Host "`nChecking for available application updates..." -ForegroundColor $PromptColor
 
     try {
-        # Check for updates and parse output
-        $updates = winget upgrade --source winget | Select-String '^[^>]+ +[^\s]+ +[^\s]+$' | ForEach-Object {
+        $updatesRaw = winget upgrade --source winget
+        $updates = $updatesRaw | Select-String '^[^>]+\s{2,}[^\s]+\s{2,}[^\s]+$' | ForEach-Object {
             $line = ($_ -replace '\s{2,}', '|') -split '\|'
             [PSCustomObject]@{
                 Name    = $line[0].Trim()
@@ -546,18 +547,28 @@ function Application-Updates {
             Write-Host "✅ All applications are already up to date." -ForegroundColor $EmphasizedNameColor
             return
         }
+    
 
         foreach ($app in $updates) {
-            Write-Host "`nUpdating: $($app.Name) ($($app.ID))..." -ForegroundColor $EmphasizedNameColor
-            winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements | Out-Null
-            Write-Host "✔ Updated: $($app.Name)" -ForegroundColor $KeptLineColor
-        }
+            Write-Host "`nUpdate available for: $($app.Name) [$($app.ID)] - Current version: $($app.Version)" -ForegroundColor $PromptColor
+            $confirm = Read-Host "Do you want to update this app? [Y/n]"
 
-        Write-Host "`n✅ Application update process completed." -ForegroundColor $EmphasizedNameColor
-    } catch {
-        Write-Host "❌ An error occurred while checking or installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            if ($confirm -eq 'n' -or $confirm -eq 'N') {
+                Write-Host "Skipped: $($app.Name)" -ForegroundColor $KeptLineColor
+                continue
+            }
+
+            try {
+                winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements | Out-Null
+                Write-Host "✔ Updated: $($app.Name)" -ForegroundColor $EmphasizedNameColor
+            } catch {
+                Write-Host "❌ Failed to update $($app.Name): $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        }
     }
-}
+        Write-Host "`n✅ Application update process completed"
+
+
 
 function Prohibited-Files {
     Write-Host "`n--- Starting: Prohibited Files ---`n"
