@@ -696,9 +696,9 @@ function Malware {
         Write-Host "Ensuring real-time protection is enabled..." -ForegroundColor Yellow
         Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
-        # Run full system scan
-        Write-Host "Running full system scan. This may take some time..." -ForegroundColor Yellow
-        Start-MpScan -ScanType FullScan
+        # Run Quick system scan full
+        Write-Host "Running Quick system scan. This may take some time..." -ForegroundColor Yellow
+        Start-MpScan -ScanType QuickScan
 
         # Get detected threats
         $threats = Get-MpThreatDetection
