@@ -493,10 +493,9 @@ if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
         }
     } catch {
         Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
-    }
+    
 } else {
     Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
-}
 
 # Always trigger background install with UsoClient (non-blocking)
 Write-Host "Triggering updates via UsoClient..." -ForegroundColor $PromptColor
@@ -511,6 +510,9 @@ try {
 
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
+}
+} 
+
 #gdsvgg
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
@@ -685,5 +687,5 @@ do {
 #Changed
 #Chnanged again
 #change
-#mergeinmg
+#merge
 
