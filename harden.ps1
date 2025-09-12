@@ -660,28 +660,64 @@ function Malware {
 
 #local policies
 function Application-Security-Settings {
-    Write-Host "Applying application security settings..." -ForegroundColor Cyan
+    Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
 
-    # Check if Execution Policy is controlled by Group Policy
-    $machinePolicy = Get-ExecutionPolicy -Scope MachinePolicy
-    $userPolicy = Get-ExecutionPolicy -Scope UserPolicy
+    try {
+        # Block App Execution from Temp & Downloads
+        Write-Host "Blocking execution from Temp and Downloads folders..." -ForegroundColor Yellow
+        $rules = @(
+            @{ Id = "AC99F0DB-2DFC-4E08-BA3A-18B632DAFF68"; Path = "$env:USERPROFILE\Downloads\*"; },
+            @{ Id = "3B576869-A4EC-4529-8536-B80A7769E899"; Path = "$env:TEMP\*"; }
+        )
+        foreach ($rule in $rules) {
+            Add-MpPreference -AttackSurfaceReductionOnlyExclusions $rule.Path -ErrorAction SilentlyContinue
+        }
 
-    if ($machinePolicy -ne 'Undefined' -or $userPolicy -ne 'Undefined') {
-        Write-Warning "ExecutionPolicy is enforced by Group Policy (MachinePolicy: $machinePolicy, UserPolicy: $userPolicy). Skipping policy change."
-    } else {
-        try {
-            Write-Host "Setting PowerShell ExecutionPolicy to AllSigned..." -ForegroundColor Yellow
-            Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
-            Write-Host "ExecutionPolicy set successfully." -ForegroundColor Green
+        # Enable SmartScreen for Microsoft Store apps
+        Write-Host "Enabling SmartScreen for Microsoft Store apps..." -ForegroundColor Yellow
+        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
+
+        # Enable SmartScreen for Edge
+        Write-Host "Enabling SmartScreen for Microsoft Edge..." -ForegroundColor Yellow
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Edge\SmartScreenEnabled" -Name "Enabled" -Value 1 -Force
+
+        # Enable SmartScreen for Windows
+        Write-Host "Enabling SmartScreen for Windows..." -ForegroundColor Yellow
+        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
+
+        # Enable Controlled Folder Access (Protect user files from ransomware)
+        Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
+        Set-MpPreference -EnableControlledFolderAccess Enabled
+
+        # Disallow unsigned PowerShell scripts
+        Write-Host "Enforcing signed PowerShell scripts only..." -ForegroundColor Yellow
+        Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
+
+        # Disable Windows Optional Features not needed
+        Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
+
+        # Remove Internet Explorer if installed
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
+        if ($ieFeature.State -eq "Enabled") {
+            Write-Host "Internet Explorer is installed. Attempting to uninstall..." -ForegroundColor Yellow
+            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -NoRestart -ErrorAction SilentlyContinue
+            Write-Host "Internet Explorer has been uninstalled. A restart is required to complete removal." -ForegroundColor Green
+        } else {
+            Write-Host "Internet Explorer is not installed or already disabled." -ForegroundColor Green
         }
-        catch {
-            Write-Warning "Failed to set ExecutionPolicy: $_"
-        }
+
+        # Disable SMB1 protocol
+        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
+
+        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
     }
-
-    # Other application security settings here...
-    # For example, configure AppLocker, enable DEP, etc.
+    catch {
+        Write-Host "Error applying application security settings: $_" -ForegroundColor Red
+    }
 }
+
+# Run the function
+Application-Security-Settings
 
 
 # Define a list to track completed option
@@ -775,3 +811,4 @@ do {
 #change
 #merge
 #YIPPIE
+#woot
