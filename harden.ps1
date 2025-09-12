@@ -276,7 +276,7 @@ function User-Auditing {
     $adminGroup = Get-LocalGroupMember -Group "Administrators"
 
     foreach ($admin in $adminGroup) {
-        # Only process user accounts (not groups or service accounts)
+        # Only process user accounts (not groups or service accounts) 
         if ($admin.ObjectClass -ne 'User') {
             continue
         }
