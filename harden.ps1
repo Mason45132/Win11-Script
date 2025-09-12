@@ -599,6 +599,30 @@ function Application-Updates {
                     } catch {
                         Write-Host "Failed to update $id : $_" -ForegroundColor Red
                     }
+                    function Reinstall-GoogleChrome {
+    Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
+
+    try {
+        # Check if Chrome is installed
+        $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
+        if ($chrome) {
+            Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
+            winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+            Start-Sleep -Seconds 5
+        } else {
+            Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
+        }
+
+        # Reinstall Chrome
+        Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
+        winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+
+        Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
+    }
+}
                 }
             }
         }
