@@ -679,7 +679,8 @@ do {
             Write-Host "`nInvalid selection. Please try again." -ForegroundColor $WarningColor
         }
     }
-} while ($true)
+}
+ while ($true)
 # End of script 
 #Changed
 #Chnanged again
