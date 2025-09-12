@@ -494,6 +494,7 @@ if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
     } catch {
         Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
+}
 } else {
     Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
 }
