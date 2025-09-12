@@ -146,7 +146,59 @@ function Document-System {
 
 
 function Enable-Updates {
-    Write-Host "`n--- Starting: Enable updates ---`n"
+    Write-Host "`n--- Starting: Enable Updates ---`n" -ForegroundColor $HeaderColor
+
+    # Check if PSWindowsUpdate module is available
+    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+        Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
+        try {
+            Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
+            Write-Host "'PSWindowsUpdate' module installed successfully." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "Failed to install PSWindowsUpdate module: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            return
+        }
+    }
+
+    Import-Module PSWindowsUpdate
+
+    # Search for available updates
+    Write-Host "Searching for available updates..." -ForegroundColor $PromptColor
+    try {
+        $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -IgnoreReboot -ErrorAction Stop
+    } catch {
+        Write-Host "Error checking for updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+
+    if (-not $updates) {
+        Write-Host "No updates available." -ForegroundColor $EmphasizedNameColor
+        return
+    }
+
+    Write-Host "`nFound $($updates.Count) update(s)." -ForegroundColor $EmphasizedNameColor
+
+    # Loop through each update and ask before installing
+    foreach ($update in $updates) {
+        Write-Host "`nUpdate: $($update.Title)" -ForegroundColor $PromptColor
+        $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
+
+        if ($answer -eq 'n' -or $answer -eq 'N') {
+            Write-Host "Skipped: $($update.Title)" -ForegroundColor $RemovedLineColor
+            continue
+        }
+
+        try {
+            Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
+            Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+            Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
+        } catch {
+            Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    }
+
+    Write-Host "`nUpdate process completed." -ForegroundColor $HeaderColor
 }
 
 function User-Auditing {
