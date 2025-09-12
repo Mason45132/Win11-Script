@@ -471,45 +471,29 @@ function OS-Updates {
         return
     }
 
-    # Create DOCS folder for logging
+    # Create DOCS folder for logs
     $desktopFolder = [Environment]::GetFolderPath("Desktop")
     $docsFolder = Join-Path $desktopFolder "DOCS"
     if (-not (Test-Path $docsFolder)) {
         New-Item -Path $docsFolder -ItemType Directory -Force | Out-Null
     }
-    $updatesFile = Join-Path $docsFolder "AvailableUpdates.txt"
-# Try PSWindowsUpdate module first (non-blocking audit only)
-if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
-    Import-Module PSWindowsUpdate -ErrorAction SilentlyContinue
+    $logFile = Join-Path $docsFolder ("UpdateLog-" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".txt")
+
+    # Trigger Windows Update in background with UsoClient
     try {
-        Write-Host "Checking for updates using PSWindowsUpdate..." -ForegroundColor $PromptColor
-        $updates = Get-WindowsUpdate -MicrosoftUpdate -IgnoreReboot -ErrorAction Stop
-        if ($updates -and $updates.Count -gt 0) {
-            $updates | Select-Object KB, Title, Size, IsDownloaded, IsInstalled |
-                Format-Table -AutoSize | Out-String | Set-Content $updatesFile
-            Write-Host "Updates documented at: $updatesFile" -ForegroundColor $PromptColor
-        } else {
-            Write-Host "No updates found via PSWindowsUpdate." -ForegroundColor $EmphasizedNameColor
-        }
+        Write-Host "Triggering Windows Update scan, download, and install..." -ForegroundColor $PromptColor
+        UsoClient StartScan
+        UsoClient StartDownload
+        UsoClient StartInstall
+        Add-Content -Path $logFile -Value "$(Get-Date) - Updates triggered with UsoClient."
+        Write-Host "Updates triggered successfully. Log saved to: $logFile" -ForegroundColor $EmphasizedNameColor
+        Write-Host "Windows may reboot automatically if updates require it." -ForegroundColor $WarningColor
     } catch {
-        Write-Host "PSWindowsUpdate check failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Add-Content -Path $logFile -Value "$(Get-Date) - Failed to trigger updates: $($_.Exception.Message)"
     }
-} else {
-    Write-Host "PSWindowsUpdate not installed — skipping audit." -ForegroundColor $WarningColor
-}
 
-# Always trigger background install with UsoClient (non-blocking)
-Write-Host "Triggering updates via UsoClient..." -ForegroundColor $PromptColor
-try {
-    UsoClient StartScan
-    UsoClient StartDownload
-    UsoClient StartInstall
-    Write-Host "Updates triggered. Windows may reboot automatically if needed." -ForegroundColor $EmphasizedNameColor
-} catch {
-    Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
-}
-
-Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
 function Application-Updates {
