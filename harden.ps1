@@ -502,73 +502,72 @@ function OS-Updates {
 
 #gdsvgglolol
 function Application-Updates {
-    Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
-    # Check if winget is available
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Host "`n[!] Winget is not available on this system." -ForegroundColor $WarningColor
-        Write-Host "Attempting to install Winget via Microsoft Store..." -ForegroundColor $PromptColor
+    # Check if winget is installed
+    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+        Write-Host "Winget not found. Attempting to install via Chocolatey..." -ForegroundColor Yellow
 
-        try {
-            # Open Microsoft Store to App Installer page
-            Start-Process "ms-windows-store://pdp/?productid=9NBLGGH4NNS1" -WindowStyle Normal
-            Write-Host "`n[!] Please install 'App Installer' from the Microsoft Store window that just opened." -ForegroundColor $EmphasizedNameColor
-            Write-Host "After installation completes, press Enter to continue..." -ForegroundColor $PromptColor
-            Read-Host
-
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ Winget is now installed!" -ForegroundColor $KeptLineColor
-            } else {
-                Write-Host "❌ Winget still not found. Please install manually and re-run this option." -ForegroundColor $WarningColor
-                return
-            }
-        } catch {
-            Write-Host "❌ Automatic install failed. You can manually install Winget from:" -ForegroundColor $WarningColor
-            Write-Host "https://github.com/microsoft/winget-cli/releases" -ForegroundColor $KeptLineColor
-            return
+        # Install Chocolatey if not present
+        if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
         }
-    }
-}
 
-    Write-Host "`nChecking for available application updates..." -ForegroundColor $PromptColor
+        # Install winget via Chocolatey
+        choco install winget -y
+        refreshenv
+    }
+
+    # Refresh environment in case winget was just installed
+    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
+
+    # Confirm winget is now available
+    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+        Write-Host "Winget installation failed or still unavailable." -ForegroundColor Red
+        return
+    }
 
     try {
-        $updatesRaw = winget upgrade --source winget
-        $updates = $updatesRaw | Select-String '^[^>]+\s{2,}[^\s]+\s{2,}[^\s]+$' | ForEach-Object {
-            $line = ($_ -replace '\s{2,}', '|') -split '\|'
-            [PSCustomObject]@{
-                Name    = $line[0].Trim()
-                ID      = $line[1].Trim()
-                Version = $line[2].Trim()
-            }
-        }
+        # Fetch list of updatable apps
+        $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
-        if ($updates.Count -eq 0) {
-            Write-Host "✅ All applications are already up to date." -ForegroundColor $EmphasizedNameColor
+        if (-not $updates) {
+            Write-Host "No application updates available." -ForegroundColor Green
             return
         }
-    
+
+        Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
+        winget upgrade
 
         foreach ($app in $updates) {
-            Write-Host "`nUpdate available for: $($app.Name) [$($app.ID)] - Current version: $($app.Version)" -ForegroundColor $PromptColor
-            $confirm = Read-Host "Do you want to update this app? [Y/n]"
+            # Extract app ID (skip headers, match proper entries)
+            if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+                $id = $matches[1].Trim()
+                $version = $matches[2].Trim()
+                $available = $matches[3].Trim()
 
-            if ($confirm -eq 'n' -or $confirm -eq 'N') {
-                Write-Host "Skipped: $($app.Name)" -ForegroundColor $KeptLineColor
-                continue
-            }
+                Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
+                $choice = Read-Host "Do you want to update $id? [Y/n]"
 
-            try {
-                winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements | Out-Null
-                Write-Host "✔ Updated: $($app.Name)" -ForegroundColor $EmphasizedNameColor
-            } catch {
-                Write-Host "❌ Failed to update $($app.Name): $($_.Exception.Message)" -ForegroundColor $WarningColor
+                if ($choice -eq 'n' -or $choice -eq 'N') {
+                    Write-Host "Skipped: $id" -ForegroundColor DarkYellow
+                } else {
+                    try {
+                        winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                        Write-Host "Updated: $id" -ForegroundColor Green
+                    } catch {
+                        Write-Host "Failed to update $id: $_" -ForegroundColor Red
+                    }
+                }
             }
         }
+    } catch {
+        Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
-        Write-Host "`n✅ Application update process completed"
-
-
+}
 
 function Prohibited-Files {
     Write-Host "`n--- Starting: Prohibited Files ---`n"
