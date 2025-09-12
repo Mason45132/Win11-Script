@@ -249,6 +249,7 @@ function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
     Write-Host "Setting maximum password age to $MaxPasswordAge days..."
     net accounts /maxpwage:$MaxPasswordAge
+=======
     Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
 
     # Set the maximum password age using the net accounts command
@@ -257,13 +258,38 @@ function Account-Policies {
         net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
         Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
     } catch {
-        Write-Host "Failed to set Maximum Password Age: $_" -ForegroundColor Red
+        Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
     }
 
-}
+    # Modify the security privileges
+    Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
+    try {
+        (Get-Content $exportedFile) `
+            -replace '(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
+            -replace '(SeDenyNetworkLogonRight\s*=\s*).*', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
+            -replace '(SeCreateTokenPrivilege\s*=\s*).*', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
+            -replace '(SeCreateGlobalPrivilege\s*=\s*).*', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
+            -replace '(SeRemoteShutdownPrivilege\s*=\s*).*', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
+            -replace '(SeLoadDriverPrivilege\s*=\s*).*', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
+            -replace '(SeSecurityPrivilege\s*=\s*).*', 'SeSecurityPrivilege = *S-1-5-32-544' `
+            | Set-Content $modifiedFile
+        Write-Host "Security privileges modified successfully." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        return
+    }
+$seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
 
-function Local-Policies {
-    Write-Host "`n--- Starting: Local Policies ---`n"
+Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
+
+secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg "C:\Windows\Security\Temp\secpol_modified.inf" /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
+} else {
+    Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
+    Write-Host "Error Output:`n$seceditOutput" -ForegroundColor $WarningColor
+}
 }
 
 function Defensive-Countermeasures {
@@ -353,7 +379,6 @@ do {
     $selection = Read-Host "`nEnter the number of your choice"
 
     switch ($selection) {
-
         "1"  { 
             Document-System 
             $completedOptions += $menuOptions[0]  # Mark as completed
@@ -419,4 +444,6 @@ do {
         }
     }
 } while ($true)
-# End of script
+# End of script 
+#Changed
+#Chnanged againer
