@@ -314,7 +314,7 @@ function User-Auditing {
                 Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
 
                 # Ask to add to Administrators group
-                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [Y/n]" 
                 if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
                     Add-LocalGroupMember -Group "Administrators" -Member $newUsername
                     Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
