@@ -805,6 +805,7 @@ function Application-Security-Settings {
 # To run it manually:
 # Application-Security-Settings
 
+
         catch {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
