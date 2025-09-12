@@ -265,12 +265,12 @@ function Account-Policies {
     try {
         (Get-Content $exportedFile) `
             -replace '(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
-            -replace '(SeDenyNetworkLogonRight\s*=\s*).*', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
-            -replace '(SeCreateTokenPrivilege\s*=\s*).*', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
-            -replace '(SeCreateGlobalPrivilege\s*=\s*).*', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
-            -replace '(SeRemoteShutdownPrivilege\s*=\s*).*', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
-            -replace '(SeLoadDriverPrivilege\s*=\s*).*', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
-            -replace '(SeSecurityPrivilege\s*=\s*).*', 'SeSecurityPrivilege = *S-1-5-32-544' `
+            -replace '(SeDenyNetworkLogonRight.*$', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
+            -replace '(SeCreateTokenPrivilege.*$', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
+            -replace '(SeCreateGlobalPrivilege.*$', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
+            -replace '(SeRemoteShutdownPrivilege.*$', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
+            -replace '(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
+            -replace '(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544' `
             | Set-Content $modifiedFile
         Write-Host "Security privileges modified successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
