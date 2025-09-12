@@ -414,8 +414,46 @@ if ($LASTEXITCODE -eq 0) {
 }
 }
 function Defensive-Countermeasures {
-    Write-Host "`n--- Starting: Defensive Countermeasures ---`n"
+    Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
+
+    try {
+        # Enable PowerShell Logging
+        Write-Host "Enabling PowerShell logging..." -ForegroundColor Yellow
+        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Force | Out-Null
+        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Value 1 -Force
+        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockInvocationLogging" -Value 1 -Force
+
+        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Force | Out-Null
+        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Value 1 -Force
+
+        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Force | Out-Null
+        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Value 1 -Force
+        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "C:\PSLogs" -Force
+
+        # Disable Windows Script Host
+        Write-Host "Disabling Windows Script Host..." -ForegroundColor Yellow
+        New-Item -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Force | Out-Null
+        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0 -Force
+
+        # Block Office Macros from Internet
+        Write-Host "Blocking Office macros from the internet..." -ForegroundColor Yellow
+        $officePaths = @("Word", "Excel", "PowerPoint")
+        foreach ($app in $officePaths) {
+            $path = "HKCU:\Software\Microsoft\Office\16.0\$app\Security"
+            New-Item -Path $path -Force | Out-Null
+            Set-ItemProperty -Path $path -Name "BlockContentExecutionFromInternet" -Value 1
+        }
+
+        # Optionally enable ASR rule
+        Write-Host "Enabling Attack Surface Reduction (ASR) rule..." -ForegroundColor Yellow
+        Add-MpPreference -AttackSurfaceReductionRules_Ids "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" -AttackSurfaceReductionRules_Actions Enabled
+
+        Write-Host "`nDefensive countermeasures applied successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Error applying countermeasures: $_" -ForegroundColor Red
+    }
 }
+
 
 function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n"
