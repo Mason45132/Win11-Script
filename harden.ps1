@@ -684,7 +684,7 @@ function Unwanted-Software {
 function Malware {
     Write-Host "`n--- Starting: Malware ---`n"
 }
-#local policies
+#local policie
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
 
