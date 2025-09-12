@@ -241,6 +241,8 @@ function User-Auditing {
             continue
         }
 
+        #Write-Host "Is '$($user.Name)' an Authorized User? [Y/n]:" -ForegroundColor $PromptColor
+        # Inline colored prompt using multiple segments (PS 5.1-safe)
         Write-Host -NoNewline "Is " -ForegroundColor $EmphasizedNameColor
         Write-Host -NoNewline "$($user.Name)" -ForegroundColor $PromptColor
         Write-Host -NoNewline " an Authorized User? [Y/n] (default Y) " -ForegroundColor $EmphasizedNameColor
@@ -293,43 +295,41 @@ function User-Auditing {
             Write-Host "Kept administrator: $($admin.Name)" -ForegroundColor $KeptLineColor
         }
     }
-
     # === Prompt to add new users ===
-    do {
-        Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
-        $addUserAnswer = Read-Host
+do {
+    Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $addUserAnswer = Read-Host
 
-        if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
-            $newUsername = Read-Host "Enter the new username"
-            $newFullName = Read-Host "Enter the user's full name (can be blank)"
+    if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
+        $newUsername = Read-Host "Enter the new username"
+        $newFullName = Read-Host "Enter the user's full name (can be blank)"
 
-            try {
-                # Create new local user WITHOUT boolean switches (fixed)
-                $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-                New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName
-                Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
+        try {
+            # Create new local user
+            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+            Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
 
-                # Force password change at next login
-                net user $newUsername /logonpasswordchg:yes
-                Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
+            # Force password change at next login
+            net user $newUsername /logonpasswordchg:yes
+            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
 
-                # Ask to add to Administrators group
-                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [Y/n]" 
-                if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
-                    Add-LocalGroupMember -Group "Administrators" -Member $newUsername
-                    Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
-                } else {
-                    Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
-                }
-            } catch {
-                Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            # Ask to add to Administrators group
+            $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+            if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
+                Add-LocalGroupMember -Group "Administrators" -Member $newUsername
+                Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
+            } else {
+                Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
             }
+        } catch {
+            Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
         }
-    } while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
+    }
+} while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
 
     Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
-
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
@@ -766,6 +766,46 @@ function Application-Security-Settings {
                 Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
             }
         }
+        catch {
+            Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
+        }
+
+        # Disable unnecessary optional Windows features
+        Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
+
+        # --- Find and automatically delete Internet Explorer ---
+        Write-Host "Checking for Internet Explorer installation..." -ForegroundColor Yellow
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
+        if ($ieFeature -and $ieFeature.State -eq "Enabled") {
+            Write-Host "Internet Explorer is installed. Removing now..." -ForegroundColor Red
+            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -NoRestart -ErrorAction SilentlyContinue
+            Write-Host "Internet Explorer has been removed. A restart is required to fully complete removal." -ForegroundColor Green
+        } elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
+            Write-Host "Internet Explorer is already disabled." -ForegroundColor Green
+        } else {
+            Write-Host "Internet Explorer feature not found on this system." -ForegroundColor Green
+        }
+
+        # Disable SMB1 protocol
+        Write-Host "Disabling SMB1 protocol..." -ForegroundColor Yellow
+        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
+        Write-Host "SMB1 protocol disabled (if it was enabled)." -ForegroundColor Green
+
+        # Disable Ctrl+Alt+Del requirement
+        Write-Host "Disabling Ctrl+Alt+Del requirement at login..." -ForegroundColor Yellow
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1 -Type DWord
+        Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
+
+        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Error applying application security settings: $_" -ForegroundColor Red
+    }
+}
+
+# To run it manually:
+# Application-Security-Settings
+
         catch {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
