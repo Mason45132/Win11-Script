@@ -575,7 +575,49 @@ function Prohibited-Files {
 
 function Unwanted-Software {
     Write-Host "`n--- Starting: Unwanted Software ---`n"
+ 
+    # List of unwanted applications
+    $unwantedApps = @(
+        "Angry IP Scanner",
+        "Everything"
+    )
+
+    foreach ($app in $unwantedApps) {
+        Write-Host "`nChecking for $app..." -ForegroundColor $PromptColor
+
+        # Search installed applications via registry
+        $installedApp = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* ,
+                                      HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* `
+                          | Where-Object { $_.DisplayName -like "*$app*" }
+
+        if ($installedApp) {
+            Write-Host "$app found. Attempting to uninstall..." -ForegroundColor $WarningColor
+            try {
+                # If Chocolatey is installed, use it to uninstall
+                if (Get-Command choco -ErrorAction SilentlyContinue) {
+                    choco uninstall $app -y
+                    Write-Host "$app uninstalled via Chocolatey." -ForegroundColor $EmphasizedNameColor
+                } else {
+                    # Fallback to standard uninstall string
+                    $uninstallString = $installedApp.UninstallString
+                    if ($uninstallString) {
+                        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$uninstallString /quiet /norestart`"" -Wait
+                        Write-Host "$app uninstalled successfully." -ForegroundColor $EmphasizedNameColor
+                    } else {
+                        Write-Host "Uninstall string not found for $app." -ForegroundColor $WarningColor
+                    }
+                }
+            } catch {
+                Write-Host "Failed to uninstall $app : $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        } else {
+            Write-Host "$app is not installed." -ForegroundColor $KeptLineColor
+        }
+    }
+
+    Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
 }
+ 
 
 function Malware {
     Write-Host "`n--- Starting: Malware ---`n"
