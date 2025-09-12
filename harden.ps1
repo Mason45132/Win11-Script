@@ -777,9 +777,8 @@ function Application-Security-Settings {
         Write-Host "Checking for Internet Explorer installation..." -ForegroundColor Yellow
         $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
         if ($ieFeature -and $ieFeature.State -eq "Enabled") {
-            Write-Host "Internet Explorer is installed. Removing now..." -ForegroundColor Red
-            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -NoRestart -ErrorAction SilentlyContinue
-            Write-Host "Internet Explorer has been removed. A restart is required to fully complete removal." -ForegroundColor Green
+            Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor Red
+            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction SilentlyContinue
         } elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
             Write-Host "Internet Explorer is already disabled." -ForegroundColor Green
         } else {
@@ -787,8 +786,8 @@ function Application-Security-Settings {
         }
 
         # Disable SMB1 protocol
-        Write-Host "Disabling SMB1 protocol..." -ForegroundColor Yellow
-        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
+        Write-Host "Disabling SMB1 protocol (restart required)..." -ForegroundColor Yellow
+        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -Restart -ErrorAction SilentlyContinue
         Write-Host "SMB1 protocol disabled (if it was enabled)." -ForegroundColor Green
 
         # Disable Ctrl+Alt+Del requirement
@@ -796,7 +795,7 @@ function Application-Security-Settings {
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1 -Type DWord
         Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
 
-        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
+        Write-Host "`nApplication security settings applied successfully. A restart will now occur." -ForegroundColor Green
     }
     catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
