@@ -682,18 +682,47 @@ function Unwanted-Software {
 }
 
 function Malware {
-    Write-Host "Starting full Windows Defender scan..." -ForegroundColor Cyan
+    <#
+    .SYNOPSIS
+    Scans the system for malware using Windows Defender and removes detected threats.
+    .DESCRIPTION
+    Ensures real-time protection is on, runs a full scan, and deletes/quarantines detected malware.
+    #>
 
-    # Run full scan
-    Start-MpScan -ScanType FullScan
+    Write-Host "`n--- Starting Malware Scan and Cleanup ---`n" -ForegroundColor Cyan
 
-    Write-Host "Full scan initiated. Opening Windows Security app..." -ForegroundColor Cyan
+    try {
+        # Enable real-time protection
+        Write-Host "Ensuring real-time protection is enabled..." -ForegroundColor Yellow
+        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
-    # Open Windows Security app
-    Start-Process "ms-settings:windowsdefender"
+        # Run full system scan
+        Write-Host "Running full system scan. This may take some time..." -ForegroundColor Yellow
+        Start-MpScan -ScanType FullScan
 
-    Write-Host "Windows Security app opened. Please check scan results and take any necessary action." -ForegroundColor Green
+        # Get detected threats
+        $threats = Get-MpThreatDetection
+
+        if ($threats) {
+            Write-Host "Detected threats found. Removing..." -ForegroundColor Red
+            $threats | ForEach-Object {
+                Remove-MpThreat -ThreatID $_.ThreatID -ErrorAction SilentlyContinue
+            }
+            Write-Host "All detected threats have been removed." -ForegroundColor Green
+        } else {
+            Write-Host "No malware detected." -ForegroundColor Green
+        }
+
+        Write-Host "`nMalware scan and cleanup completed successfully." -ForegroundColor Cyan
+    }
+    catch {
+        Write-Host "Error during malware scan: $_" -ForegroundColor Red
+    }
 }
+
+# Usage:
+# To run the malware scan, simply type:
+# Malware
 
 #local policie
 function Application-Security-Settings {
@@ -863,3 +892,4 @@ do {
 #YIPPIE
 #yo
 #yo
+#rur
