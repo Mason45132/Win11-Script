@@ -538,7 +538,7 @@ function OS-Updates {
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-#gdsvgglololo
+#gdsvgglololol
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
