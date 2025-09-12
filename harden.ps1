@@ -458,7 +458,6 @@ function Service-Auditing {
 }
 
 function OS-Updates {
-    function OS-Updates {
     Write-Host "`n--- Starting: OS Updates ---`n" -ForegroundColor $HeaderColor
 
     # Re-enable Windows Update service
@@ -513,8 +512,6 @@ function OS-Updates {
     }
 
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
-}
-
 }
 
 function Application-Updates {
