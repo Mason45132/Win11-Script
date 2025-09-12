@@ -241,8 +241,6 @@ function User-Auditing {
             continue
         }
 
-        #Write-Host "Is '$($user.Name)' an Authorized User? [Y/n]:" -ForegroundColor $PromptColor
-        # Inline colored prompt using multiple segments (PS 5.1-safe)
         Write-Host -NoNewline "Is " -ForegroundColor $EmphasizedNameColor
         Write-Host -NoNewline "$($user.Name)" -ForegroundColor $PromptColor
         Write-Host -NoNewline " an Authorized User? [Y/n] (default Y) " -ForegroundColor $EmphasizedNameColor
@@ -295,41 +293,43 @@ function User-Auditing {
             Write-Host "Kept administrator: $($admin.Name)" -ForegroundColor $KeptLineColor
         }
     }
+
     # === Prompt to add new users ===
-do {
-    Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
-    $addUserAnswer = Read-Host
+    do {
+        Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
+        $addUserAnswer = Read-Host
 
-    if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
-        $newUsername = Read-Host "Enter the new username"
-        $newFullName = Read-Host "Enter the user's full name (can be blank)"
+        if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
+            $newUsername = Read-Host "Enter the new username"
+            $newFullName = Read-Host "Enter the user's full name (can be blank)"
 
-        try {
-            # Create new local user
-            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
-            Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
+            try {
+                # Create new local user WITHOUT boolean switches (fixed)
+                $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+                New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName
+                Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
 
-            # Force password change at next login
-            net user $newUsername /logonpasswordchg:yes
-            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
+                # Force password change at next login
+                net user $newUsername /logonpasswordchg:yes
+                Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
 
-            # Ask to add to Administrators group
-            $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
-            if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
-                Add-LocalGroupMember -Group "Administrators" -Member $newUsername
-                Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
-            } else {
-                Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
+                # Ask to add to Administrators group
+                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+                if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
+                    Add-LocalGroupMember -Group "Administrators" -Member $newUsername
+                    Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
+                } else {
+                    Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
+                }
+            } catch {
+                Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
             }
-        } catch {
-            Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
         }
-    }
-} while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
+    } while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
 
     Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
+
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
