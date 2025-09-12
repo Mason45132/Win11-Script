@@ -529,7 +529,6 @@ function Application-Updates {
         }
     }
 
-    # Proceed with updates
     Write-Host "`nChecking for available application updates..." -ForegroundColor $PromptColor
 
     try {
@@ -548,7 +547,6 @@ function Application-Updates {
             return
         }
 
-        # Automatically update all apps
         foreach ($app in $updates) {
             Write-Host "`nUpdating: $($app.Name) ($($app.ID))..." -ForegroundColor $EmphasizedNameColor
             winget upgrade --id $($app.ID) --silent --accept-package-agreements --accept-source-agreements | Out-Null
@@ -560,7 +558,6 @@ function Application-Updates {
         Write-Host "❌ An error occurred while checking or installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 }
-
 
 function Prohibited-Files {
     Write-Host "`n--- Starting: Prohibited Files ---`n"
