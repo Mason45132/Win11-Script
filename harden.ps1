@@ -249,7 +249,6 @@ function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
     Write-Host "Setting maximum password age to $MaxPasswordAge days..."
     net accounts /maxpwage:$MaxPasswordAge
-=======
     Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
 
     # Set the maximum password age using the net accounts command
