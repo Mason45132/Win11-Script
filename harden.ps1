@@ -533,7 +533,7 @@ function Application-Updates {
     Write-Host "`nChecking for available application updates..." -ForegroundColor $PromptColor
 
     try {
-        # Check for updates
+        # Check for updates and parse output
         $updates = winget upgrade --source winget | Select-String '^[^>]+ +[^\s]+ +[^\s]+$' | ForEach-Object {
             $line = ($_ -replace '\s{2,}', '|') -split '\|'
             [PSCustomObject]@{
@@ -560,6 +560,7 @@ function Application-Updates {
         Write-Host "❌ An error occurred while checking or installing updates: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 }
+
 
 function Prohibited-Files {
     Write-Host "`n--- Starting: Prohibited Files ---`n"
