@@ -572,52 +572,39 @@ function Application-Updates {
 function Prohibited-Files {
     Write-Host "`n--- Starting: Prohibited Files ---`n"
 }
-
 function Unwanted-Software {
-    Write-Host "`n--- Starting: Unwanted Software ---`n"
- 
-    # List of unwanted applications
-    $unwantedApps = @(
-        "Angry IP Scanner",
-        "Everything"
-    )
+    Write-Host "`n--- Starting: Unwanted Software ---`n" -ForegroundColor $HeaderColor
 
-    foreach ($app in $unwantedApps) {
-        Write-Host "`nChecking for $app..." -ForegroundColor $PromptColor
-
-        # Search installed applications via registry
-        $installedApp = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* ,
-                                      HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* `
-                          | Where-Object { $_.DisplayName -like "*$app*" }
-
-        if ($installedApp) {
-            Write-Host "$app found. Attempting to uninstall..." -ForegroundColor $WarningColor
-            try {
-                # If Chocolatey is installed, use it to uninstall
-                if (Get-Command choco -ErrorAction SilentlyContinue) {
-                    choco uninstall $app -y
-                    Write-Host "$app uninstalled via Chocolatey." -ForegroundColor $EmphasizedNameColor
-                } else {
-                    # Fallback to standard uninstall string
-                    $uninstallString = $installedApp.UninstallString
-                    if ($uninstallString) {
-                        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$uninstallString /quiet /norestart`"" -Wait
-                        Write-Host "$app uninstalled successfully." -ForegroundColor $EmphasizedNameColor
-                    } else {
-                        Write-Host "Uninstall string not found for $app." -ForegroundColor $WarningColor
-                    }
-                }
-            } catch {
-                Write-Host "Failed to uninstall $app : $($_.Exception.Message)" -ForegroundColor $WarningColor
-            }
-        } else {
-            Write-Host "$app is not installed." -ForegroundColor $KeptLineColor
+    # --- Uninstall Angry IP Scanner ---
+    $angryIPPath = "C:\Program Files\Angry IP Scanner\uninstall.exe"
+    if (Test-Path $angryIPPath) {
+        Write-Host "Uninstalling Angry IP Scanner..." -ForegroundColor $PromptColor
+        try {
+            Start-Process -FilePath $angryIPPath -ArgumentList "/S" -Wait -ErrorAction Stop
+            Write-Host "Angry IP Scanner uninstalled successfully." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "Failed to uninstall Angry IP Scanner: $($_.Exception.Message)" -ForegroundColor $WarningColor
         }
+    } else {
+        Write-Host "Angry IP Scanner is not installed." -ForegroundColor $KeptLineColor
+    }
+
+    # --- Remove Everything FTP root files ---
+    $everythingPath = "C:\inetpub\ftproot\Everything"
+    if (Test-Path $everythingPath) {
+        Write-Host "Removing all files from $everythingPath..." -ForegroundColor $PromptColor
+        try {
+            Get-ChildItem -Path $everythingPath -File -Recurse | Remove-Item -Force
+            Write-Host "All files removed from $everythingPath." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "Failed to remove files from $everythingPath : $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    } else {
+        Write-Host "Folder $everythingPath does not exist." -ForegroundColor $KeptLineColor
     }
 
     Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
 }
- 
 
 function Malware {
     Write-Host "`n--- Starting: Malware ---`n"
