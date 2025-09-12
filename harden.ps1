@@ -479,7 +479,7 @@ function OS-Updates {
     }
     $logFile = Join-Path $docsFolder ("UpdateLog-" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".txt")
 
-    # Trigger Windows Update in background with UsoClienthjbhj
+    # Trigger Windows Update in background with UsoClient
     try {
         Write-Host "Triggering Windows Update scan, download, and install..." -ForegroundColor $PromptColor
         UsoClient StartScan
@@ -500,7 +500,7 @@ function OS-Updates {
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-
+#gdsvgg
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor $HeaderColor
 
@@ -675,4 +675,4 @@ do {
 #Chnanged again
 #change
 #merge
-#rrr
+
