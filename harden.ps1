@@ -476,64 +476,42 @@ function Local-Policies {
 
 
 function Defensive-Countermeasures {
-    Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Enabling Windows Defender Real-Time Protection ---`n" -ForegroundColor Cyan
 
     try {
-        # Enable PowerShell Logging
-        Write-Host "Enabling PowerShell logging..." -ForegroundColor Yellow
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockInvocationLogging" -Value 1 -Force
-
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Value 1 -Force
-
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "C:\PSLogs" -Force
-
-        # Disable Windows Script Host
-        Write-Host "Disabling Windows Script Host..." -ForegroundColor Yellow
-        New-Item -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0 -Force
-
-        # Block Office Macros from Internet
-        Write-Host "Blocking Office macros from the internet..." -ForegroundColor Yellow
-        $officePaths = @("Word", "Excel", "PowerPoint")
-        foreach ($app in $officePaths) {
-            $path = "HKCU:\Software\Microsoft\Office\16.0\$app\Security"
-            New-Item -Path $path -Force | Out-Null
-            Set-ItemProperty -Path $path -Name "BlockContentExecutionFromInternet" -Value 1
-        }
-
-        # Enable Attack Surface Reduction (ASR) rule
-        Write-Host "Enabling Attack Surface Reduction (ASR) rule..." -ForegroundColor Yellow
-        Add-MpPreference -AttackSurfaceReductionRules_Ids "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" -AttackSurfaceReductionRules_Actions Enabled
-
-        # Ensure Windows Update service is enabled
-        Write-Host "Ensuring Windows Update service is enabled..." -ForegroundColor Yellow
-        $serviceName = "wuauserv"
+        # Ensure Defender service is running
+        $serviceName = "WinDefend"
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
         if ($service) {
             if ($service.StartType -ne "Automatic") {
                 Set-Service -Name $serviceName -StartupType Automatic
-                Write-Host "Set Windows Update service startup type to 'Automatic'."
+                Write-Host "Set Windows Defender service startup type to 'Automatic'." -ForegroundColor Yellow
             }
 
             if ($service.Status -ne "Running") {
                 Start-Service -Name $serviceName
-                Write-Host "Started Windows Update service."
+                Write-Host "Started Windows Defender service." -ForegroundColor Yellow
             } else {
-                Write-Host "Windows Update service is already running."
+                Write-Host "Windows Defender service is already running." -ForegroundColor Green
             }
         } else {
-            Write-Host "Windows Update service not found!" -ForegroundColor Red
+            Write-Host "Windows Defender service not found!" -ForegroundColor Red
         }
 
-        Write-Host "`nDefensive countermeasures applied successfully." -ForegroundColor Green
+        # Enable Real-Time Protection
+        Write-Host "Enabling real-time protection..." -ForegroundColor Yellow
+        Set-MpPreference -DisableRealtimeMonitoring $false
+
+        # Verify status
+        $status = Get-MpComputerStatus
+        if ($status.RealTimeProtectionEnabled) {
+            Write-Host "`n✅ Real-time protection is ENABLED." -ForegroundColor Green
+        } else {
+            Write-Host "`n⚠️ Real-time protection could not be enabled." -ForegroundColor Red
+        }
     } catch {
-        Write-Host "Error applying countermeasures: $_" -ForegroundColor Red
+        Write-Host "Error enabling Windows Defender real-time protection: $_" -ForegroundColor Red
     }
 }
 
