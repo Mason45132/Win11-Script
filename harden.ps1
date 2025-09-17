@@ -436,44 +436,83 @@ function Account-Policies {
 
 
 function Local-Policies {
-    Write-Host "`n--- Starting: Local-Policies ---`n"
+    Write-Host "`n--- Local Policies ---`n"
 
-    # Define the export file path
-    $exportedFile = "$env:TEMP\secpol.inf"
-    $modifiedFile = "$env:TEMP\secpol_modified.inf"
+    do {
+        Write-Host "Choose a setting to configure:"
+        Write-Host "1. Enable Audit Logon [Failure]"
+        Write-Host "2. Restrict SeTakeOwnershipPrivilege (Admins only)"
+        Write-Host "3. CTRL+ALT+DEL Requirement (Enable/Disable)"
+        Write-Host "4. Back to Main Menu"
 
-    Write-Host "Modifying security privileges..." -ForegroundColor Cyan
+        $choice = Read-Host "Enter your choice"
 
-    try {
-        # Export current USER_RIGHTS policy to the export file
-        secedit /export /cfg $exportedFile /areas USER_RIGHTS
+        switch ($choice) {
+            '1' {
+                Write-Host "Enabling Audit Logon [Failure]..." -ForegroundColor Cyan
+                auditpol /set /subcategory:"Logon" /failure:enable
+                Write-Host "Audit policy updated." -ForegroundColor Green
+            }
 
-        # Ensure the export file was created
-        if (-not (Test-Path $exportedFile)) {
-            throw "Exported file not found at $exportedFile"
+            '2' {
+                Write-Host "Restricting SeTakeOwnershipPrivilege to Administrators..." -ForegroundColor Cyan
+
+                $exportedFile = "$env:TEMP\secpol.inf"
+                $modifiedFile = "$env:TEMP\secpol_modified.inf"
+
+                secedit /export /cfg $exportedFile /areas USER_RIGHTS
+
+                if (-not (Test-Path $exportedFile)) {
+                    Write-Host "Failed to export security policy." -ForegroundColor Red
+                    break
+                }
+
+                $content = Get-Content $exportedFile
+                $content = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
+                $content | Set-Content $modifiedFile -Encoding ASCII
+
+                secedit /configure /db secedit.sdb /cfg $modifiedFile /areas USER_RIGHTS /overwrite
+
+                Write-Host "Privilege updated successfully." -ForegroundColor Green
+            }
+
+            '3' {
+                Write-Host "`nCTRL+ALT+DEL Secure Attention Requirement" -ForegroundColor Cyan
+                Write-Host "1. Enable (require CTRL+ALT+DEL)"
+                Write-Host "2. Disable (do not require it)"
+                $ctrlChoice = Read-Host "Enter your choice"
+
+                $regPath = "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System"
+                $regName = "DisableCAD"
+
+                switch ($ctrlChoice) {
+                    '1' {
+                        Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Force
+                        Write-Host "CTRL+ALT+DEL is now required at login." -ForegroundColor Green
+                    }
+                    '2' {
+                        Set-ItemProperty -Path $regPath -Name $regName -Value 1 -Force
+                        Write-Host "CTRL+ALT+DEL is no longer required at login." -ForegroundColor Yellow
+                    }
+                    default {
+                        Write-Host "Invalid choice." -ForegroundColor Red
+                    }
+                }
+            }
+
+            '4' {
+                Write-Host "Returning to main menu..."
+            }
+
+            default {
+                Write-Host "Invalid option. Try again." -ForegroundColor Red
+            }
         }
 
-        # Read the content of the export files
-        $content = Get-Content $exportedFile
+    } while ($choice -ne '4')
 
-        # Replace the SeTakeOwnershipPrivilege line
-        $content = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
-
-        # Save the modified content
-        $content | Set-Content $modifiedFile -Encoding ASCII
-
-        # Import the modified security policy
-        secedit /configure /db secedit.sdb /cfg $modifiedFile /areas USER_RIGHTS /overwrite
-
-        Write-Host "Security privileges modified successfully." -ForegroundColor Green
-    }
-    catch {
-        Write-Host "Error modifying security privileges: $_" -ForegroundColor Red
-    }
-
-    Write-Host "`n--- Local-Policies Completed ---`n"
+    Write-Host "`n--- Local Policies Completed ---`n"
 }
-
 
 function Defensive-Countermeasures {
     Write-Host "`n--- Enabling Windows Defender Real-Time Protection ---`n" -ForegroundColor Cyan
