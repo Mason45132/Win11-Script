@@ -453,7 +453,7 @@ function Local-Policies {
             throw "Exported file not found at $exportedFile"
         }
 
-        # Read the content of the export file
+        # Read the content of the export files
         $content = Get-Content $exportedFile
 
         # Replace the SeTakeOwnershipPrivilege line
