@@ -462,56 +462,47 @@ function Local-Policies {
             -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
             -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
     } catch {
-        # Ask user for CTRL+ALT+DEL requirement
-    do {
-        $userInput = Read-Host "Do you want to require CTRL+ALT+DEL at login? (Y/N)"
-    } while ($userInput -notmatch '^[YyNn]$')
-
-    $disableCADValue = if ($userInput -match '^[Yy]$') { 0 } else { 1 }
-    $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-
-    $rebootNeeded = $false
-
+         # 1. Configure CTRL+ALT+DEL requirement
     try {
-        Write-Host "Checking current CTRL+ALT+DEL policy..." -ForegroundColor Cyan
-        $currentValue = Get-ItemProperty -Path $registryPath -Name "DisableCAD" -ErrorAction SilentlyContinue
+        $ctrlAltDelDesiredValue = 0  # 0 = Require CTRL+ALT+DEL
+        $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+        $currentCAD = Get-ItemProperty -Path $registryPath -Name "DisableCAD" -ErrorAction SilentlyContinue
 
-        if ($null -eq $currentValue -or $currentValue.DisableCAD -ne $disableCADValue) {
-            Write-Host "Updating CTRL+ALT+DEL policy..." -ForegroundColor Cyan
-
-            Set-ItemProperty -Path $registryPath `
-                             -Name "DisableCAD" `
-                             -Value $disableCADValue `
-                             -Type DWord
-
-            if ($disableCADValue -eq 0) {
-                Write-Host "CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
-            } else {
-                Write-Host "CTRL+ALT+DEL requirement has been DISABLED." -ForegroundColor Yellow
-            }
-
+        if ($null -eq $currentCAD -or $currentCAD.DisableCAD -ne $ctrlAltDelDesiredValue) {
+            Set-ItemProperty -Path $registryPath -Name "DisableCAD" -Value $ctrlAltDelDesiredValue -Type DWord
+            Write-Host "✔ CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
             $rebootNeeded = $true
         } else {
-            Write-Host "CTRL+ALT+DEL policy is already set as requested. No changes made." -ForegroundColor DarkGray
+            Write-Host "✔ CTRL+ALT+DEL setting already correct." -ForegroundColor DarkGray
         }
-
     } catch {
-        Write-Host "Failed to update CTRL+ALT+DEL setting: $($_.Exception.Message)" -ForegroundColor Red
-        return
+        Write-Host "❌ Failed to set CTRL+ALT+DEL policy: $($_.Exception.Message)" -ForegroundColor Red
     }
 
-    # Conditional reboot
+    # 2. Configure Audit Logon Events [Failure]
+    try {
+        Write-Host "Configuring Audit Logon Events for Failure..." -ForegroundColor Cyan
+        AuditPol /set /subcategory:"Logon" /failure:enable
+
+        # Optional: Check and confirm
+        $auditStatus = AuditPol /get /subcategory:"Logon" | Where-Object { $_ -match "Logon\s+.*" }
+        Write-Host "✔ Audit Logon Policy Set: $auditStatus" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to configure Audit Logon: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    # Prompt for reboot if needed
     if ($rebootNeeded) {
-        $rebootInput = Read-Host "The setting change requires a reboot. Reboot now? (Y/N)"
+        $rebootInput = Read-Host "A reboot is required for some settings to take effect. Reboot now? (Y/N)"
         if ($rebootInput -match '^[Yy]$') {
-            Write-Host "Rebooting now..." -ForegroundColor Cyan
+            Write-Host "Rebooting..." -ForegroundColor Cyan
             Restart-Computer -Force
         } else {
-            Write-Host "Please remember to reboot later for the changes to take effect." -ForegroundColor Yellow
+            Write-Host "⚠ Please reboot manually later." -ForegroundColor Yellow
         }
     }
 
-    Write-Host "`n--- Local-Policies Completed ---`n"
+    Write-Host "`n--- Local Security Policies Configured ---`n"
 }
 }
 function Defensive-Countermeasures {
