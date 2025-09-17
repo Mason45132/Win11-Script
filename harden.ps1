@@ -582,7 +582,8 @@ function Uncategorized-OS-Settings {
     }
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
-}
+}  # <-- closing brace for the function
+
 
 
 function Service-Auditing {
