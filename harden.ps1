@@ -721,7 +721,7 @@ function Application-Updates {
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr")
+        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "users.txt")
     )
 
     Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
@@ -734,16 +734,28 @@ function Prohibited-Files {
                     Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
                     foreach ($file in $foundFiles) {
                         Write-Host $file.FullName -ForegroundColor Yellow
-                        $response = Read-Host "Do you want to delete this file? (Y/N)"
-                        if ($response -match '^[Yy]$') {
+
+                        if ($file.Name -ieq "users.txt") {
+                            # Always remove clear text password file without asking
                             try {
                                 Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                                Write-Host "🚫 Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
                             } catch {
                                 Write-Warning "Failed to delete $($file.FullName): $_"
                             }
                         } else {
-                            Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
+                            # Ask for confirmation before removing other prohibited files
+                            $response = Read-Host "Do you want to delete this file? (Y/N)"
+                            if ($response -match '^[Yy]$') {
+                                try {
+                                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                                    Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                                } catch {
+                                    Write-Warning "Failed to delete $($file.FullName): $_"
+                                }
+                            } else {
+                                Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
+                            }
                         }
                     }
                 } else {
@@ -754,6 +766,7 @@ function Prohibited-Files {
             }
         }
     }
+
     Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
 }
 
