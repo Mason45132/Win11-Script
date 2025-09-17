@@ -468,36 +468,50 @@ function Local-Policies {
     } while ($userInput -notmatch '^[YyNn]$')
 
     $disableCADValue = if ($userInput -match '^[Yy]$') { 0 } else { 1 }
+    $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+
+    $rebootNeeded = $false
 
     try {
-        Write-Host "Setting CTRL+ALT+DEL policy..." -ForegroundColor Cyan
+        Write-Host "Checking current CTRL+ALT+DEL policy..." -ForegroundColor Cyan
+        $currentValue = Get-ItemProperty -Path $registryPath -Name "DisableCAD" -ErrorAction SilentlyContinue
 
-        # Set the registry key directly
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
-                         -Name "DisableCAD" `
-                         -Value $disableCADValue `
-                         -Type DWord
+        if ($null -eq $currentValue -or $currentValue.DisableCAD -ne $disableCADValue) {
+            Write-Host "Updating CTRL+ALT+DEL policy..." -ForegroundColor Cyan
 
-        if ($disableCADValue -eq 0) {
-            Write-Host "CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
+            Set-ItemProperty -Path $registryPath `
+                             -Name "DisableCAD" `
+                             -Value $disableCADValue `
+                             -Type DWord
+
+            if ($disableCADValue -eq 0) {
+                Write-Host "CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
+            } else {
+                Write-Host "CTRL+ALT+DEL requirement has been DISABLED." -ForegroundColor Yellow
+            }
+
+            $rebootNeeded = $true
         } else {
-            Write-Host "CTRL+ALT+DEL requirement has been DISABLED." -ForegroundColor Yellow
+            Write-Host "CTRL+ALT+DEL policy is already set as requested. No changes made." -ForegroundColor DarkGray
         }
+
     } catch {
         Write-Host "Failed to update CTRL+ALT+DEL setting: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    # Continue with any other local policy configurations as needed
-    Write-Host "`n--- Local-Policies Completed ---`n"
-    Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
-    secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg $modifiedFile /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
-    } else {
-        Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
+    # Conditional reboot
+    if ($rebootNeeded) {
+        $rebootInput = Read-Host "The setting change requires a reboot. Reboot now? (Y/N)"
+        if ($rebootInput -match '^[Yy]$') {
+            Write-Host "Rebooting now..." -ForegroundColor Cyan
+            Restart-Computer -Force
+        } else {
+            Write-Host "Please remember to reboot later for the changes to take effect." -ForegroundColor Yellow
+        }
     }
+
+    Write-Host "`n--- Local-Policies Completed ---`n"
 }
 }
 function Defensive-Countermeasures {
