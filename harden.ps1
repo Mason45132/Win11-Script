@@ -148,7 +148,7 @@ function Document-System {
 function Enable-Updates {
     Write-Host "`n--- Starting: Enable Updates ---`n" -ForegroundColor $HeaderColor
 
-    # Check if PSWindowsUpdate module is available
+    # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
