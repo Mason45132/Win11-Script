@@ -100,7 +100,7 @@ function Document-System {
         Write-Host "Failed to document running services: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 
-    # Document installed features
+    # Document installed features 
     $featuresFile = Join-Path -Path $docsFolder -ChildPath "features.txt"
     Write-Host "Documenting installed features to: $featuresFile" -ForegroundColor $PromptColor
     try {
@@ -223,25 +223,38 @@ function Enable-Updates {
     } else {
         Write-Host "Google Chrome is already installed. Checking for updates..." -ForegroundColor $PromptColor
 
-        # Trigger Chrome's built-in updater silently
-        $chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
-        if (-not (Test-Path $chromeUpdater)) {
-            $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
-        }
+# Attempt to run Chrome's updater
+$chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
+if (-not (Test-Path $chromeUpdater)) {
+    $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
+}
 
-        if (Test-Path $chromeUpdater) {
-            try {
-                Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
-                Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
-            } catch {
-                Write-Host "Failed to update Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-            }
-        } else {
-            Write-Host "Chrome updater not found. Skipping update." -ForegroundColor $WarningColor
-        }
+if (Test-Path $chromeUpdater) {
+    try {
+        Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
+        Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
+    } catch {
+        Write-Host "Failed to run Chrome updater: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    }
+} else {
+    Write-Host "Chrome updater not found. Reinstalling Chrome to restore update functionality..." -ForegroundColor $WarningColor
+
+    $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+    $tempInstaller = "$env:TEMP\chrome_installer.exe"
+
+    try {
+        Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
+        Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
+        Write-Host "Chrome reinstalled successfully. Updater should now be restored." -ForegroundColor $KeptLineColor
+    } catch {
+        Write-Host "Failed to reinstall Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    } finally {
+        if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
+    }
+}
     }
 
-    Write-Host "`nUpdate process completed." -ForegroundColor $HeaderColor
+    Write-Host "`n--- Enable Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
 function User-Auditing {
