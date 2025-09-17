@@ -550,7 +550,7 @@ function Defensive-Countermeasures {
                 $tamperValue = (Get-ItemProperty -Path $tamperKey -Name "TamperProtection" -ErrorAction SilentlyContinue).TamperProtection
                 if ($tamperValue -eq 5) { $tamperStatus = "On" }
                 elseif ($tamperValue -eq 0) { $tamperStatus = "Off" }
-            } catch { }
+            } catch {
         }
 
         if ($tamperStatus -eq "On") {
@@ -567,6 +567,8 @@ function Defensive-Countermeasures {
                 Write-Host "   ➡ If this is a managed PC, you’ll need to change the policy in Group Policy Editor or via your admin." -ForegroundColor Yellow
             }
         }
+    }
+
 # Remove Group Policy setting disabling real-time protection
 $gpoKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
 
@@ -794,8 +796,6 @@ function Application-Updates {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
-
-
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
