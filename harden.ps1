@@ -550,9 +550,7 @@ function Defensive-Countermeasures {
                 $tamperValue = (Get-ItemProperty -Path $tamperKey -Name "TamperProtection" -ErrorAction SilentlyContinue).TamperProtection
                 if ($tamperValue -eq 5) { $tamperStatus = "On" }
                 elseif ($tamperValue -eq 0) { $tamperStatus = "Off" }
-            } catch {
-                Write-Host "Could not read Tamper Protection status." -ForegroundColor DarkYellow
-            }
+            } catch { }
         }
 
         if ($tamperStatus -eq "On") {
@@ -566,20 +564,26 @@ function Defensive-Countermeasures {
             $policyValues = Get-ItemProperty -Path $policyKey
             if ($policyValues.DisableRealtimeMonitoring -eq 1) {
                 Write-Host "⚠️ Group Policy is set to DISABLE real-time protection." -ForegroundColor Magenta
-                Write-Host "   ➡ Attempting to reset policy..." -ForegroundColor Yellow
-                try {
-                    Set-ItemProperty -Path $policyKey -Name "DisableRealtimeMonitoring" -Value 0
-                    Write-Host "✅ Group Policy setting 'DisableRealtimeMonitoring' set to 0." -ForegroundColor Green
-                } catch {
-                    Write-Host "❌ Failed to modify Group Policy setting: $_" -ForegroundColor Red
-                }
+                Write-Host "   ➡ If this is a managed PC, you’ll need to change the policy in Group Policy Editor or via your admin." -ForegroundColor Yellow
             }
-        } else {
-            Write-Host "ℹ️ Group Policy key not found; nothing to modify." -ForegroundColor Cyan
         }
+# Remove Group Policy setting disabling real-time protection
+$gpoKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
 
-        # Try enabling Defender again
-        Set-MpPreference -DisableRealtimeMonitoring $false
+if (Test-Path $gpoKey) {
+    try {
+        # Set the value to 0, or remove it
+        Set-ItemProperty -Path $gpoKey -Name "DisableRealtimeMonitoring" -Value 0
+        Write-Host "✅ Group Policy setting 'DisableRealtimeMonitoring' set to 0." -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to modify Group Policy setting: $_" -ForegroundColor Red
+    }
+} else {
+    Write-Host "ℹ️ Group Policy key not found; nothing to modify." -ForegroundColor Cyan
+}
+
+# Try enabling Defender again
+Set-MpPreference -DisableRealtimeMonitoring $false
 
         # --- Verify Defender status ---
         $status = Get-MpComputerStatus
@@ -591,7 +595,6 @@ function Defensive-Countermeasures {
                 Write-Host "   ➡ Another antivirus may be installed and taking over." -ForegroundColor Magenta
             }
         }
-
     } catch {
         Write-Host "Error enabling Windows Defender real-time protection: $_" -ForegroundColor Red
     }
@@ -791,6 +794,8 @@ function Application-Updates {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
+
+
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
