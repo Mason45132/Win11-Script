@@ -441,7 +441,15 @@ function Local-Policies {
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
         $content = Get-Content $exportedFile
+if (-not $exportFile) {
+    Write-Error "exportFile path is null or empty"
+    exit
+}
 
+if (-not (Test-Path $exportFile)) {
+    Write-Error "Exported file does not exist at path: $exportFile"
+    exit
+}
         # Modify privilege rights
         $content = $content `
             -replace '\(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
