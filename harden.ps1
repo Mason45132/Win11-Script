@@ -546,8 +546,31 @@ function Defensive-Countermeasures {
 }
 
 function Uncategorized-OS-Settings {
-    Write-Host "`n--- Starting: Uncategorized OS Settings ---`n"
+    Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
+
+    try {
+        # Disable Remote Assistance
+        Write-Host "Disabling Remote Assistance connections..." -ForegroundColor Yellow
+        $raKey = "HKLM:\System\CurrentControlSet\Control\Remote Assistance"
+        if (-not (Test-Path $raKey)) {
+            New-Item -Path $raKey -Force | Out-Null
+        }
+        Set-ItemProperty -Path $raKey -Name fAllowToGetHelp -Value 0 -Force
+
+        # Verify
+        $raStatus = (Get-ItemProperty -Path $raKey -Name fAllowToGetHelp).fAllowToGetHelp
+        if ($raStatus -eq 0) {
+            Write-Host "✅ Remote Assistance is disabled." -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Failed to disable Remote Assistance." -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
+    }
+
+    Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
+
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
