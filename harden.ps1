@@ -241,6 +241,8 @@ function User-Auditing {
             continue
         }
 
+        #Write-Host "Is '$($user.Name)' an Authorized User? [Y/n]:" -ForegroundColor $PromptColor
+        # Inline colored prompt using multiple segments (PS 5.1-safe)
         Write-Host -NoNewline "Is " -ForegroundColor $EmphasizedNameColor
         Write-Host -NoNewline "$($user.Name)" -ForegroundColor $PromptColor
         Write-Host -NoNewline " an Authorized User? [Y/n] (default Y) " -ForegroundColor $EmphasizedNameColor
@@ -293,43 +295,41 @@ function User-Auditing {
             Write-Host "Kept administrator: $($admin.Name)" -ForegroundColor $KeptLineColor
         }
     }
-
     # === Prompt to add new users ===
-    do {
-        Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
-        $addUserAnswer = Read-Host
+do {
+    Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $addUserAnswer = Read-Host
 
-        if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
-            $newUsername = Read-Host "Enter the new username"
-            $newFullName = Read-Host "Enter the user's full name (can be blank)"
+    if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
+        $newUsername = Read-Host "Enter the new username"
+        $newFullName = Read-Host "Enter the user's full name (can be blank)"
 
-            try {
-                # Create new local user WITHOUT boolean switches (fixed)
-                $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-                New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName
-                Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
+        try {
+            # Create new local user
+            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+            Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
 
-                # Force password change at next login
-                net user $newUsername /logonpasswordchg:yes
-                Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
+            # Force password change at next login
+            net user $newUsername /logonpasswordchg:yes
+            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
 
-                # Ask to add to Administrators group
-                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [Y/n]" 
-                if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
-                    Add-LocalGroupMember -Group "Administrators" -Member $newUsername
-                    Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
-                } else {
-                    Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
-                }
-            } catch {
-                Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            # Ask to add to Administrators group
+            $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+            if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
+                Add-LocalGroupMember -Group "Administrators" -Member $newUsername
+                Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
+            } else {
+                Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
             }
+        } catch {
+            Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
         }
-    } while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
+    }
+} while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
 
     Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
-
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
@@ -569,43 +569,64 @@ function Application-Updates {
     }
 
     try {
-        # Fetch list of updatable appoop
+        # Fetch list of updatable apps
         $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
         if (-not $updates) {
             Write-Host "No application updates available." -ForegroundColor Green
-            return
-        }
+        } else {
+            Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
+            winget upgrade
 
-        Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
-        winget upgrade
+            foreach ($app in $updates) {
+                # Extract app ID (skip headers, match proper entries)
+                if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+                    $id = $matches[1].Trim()
+                    $version = $matches[2].Trim()
+                    $available = $matches[3].Trim()
 
-        foreach ($app in $updates) {
-            # Extract app ID (skip headers, match proper entries)
-            if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
-                $id = $matches[1].Trim()
-                $version = $matches[2].Trim()
-                $available = $matches[3].Trim()
+                    Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
+                    $choice = Read-Host "Do you want to update $id? [Y/n]"
 
-                Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
-                $choice = Read-Host "Do you want to update $id? [Y/n]"
-
-                if ($choice -eq 'n' -or $choice -eq 'N') {
-                    Write-Host "Skipped: $id" -ForegroundColor DarkYellow
-                } else {
-                    try {
-                        winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
-                        Write-Host "Updated: $id" -ForegroundColor Green
-                    } catch {
-                        Write-Host "Failed to update $id : $_" -ForegroundColor Red
+                    if ($choice -eq 'n' -or $choice -eq 'N') {
+                        Write-Host "Skipped: $id" -ForegroundColor DarkYellow
+                    } else {
+                        try {
+                            winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                            Write-Host "Updated: $id" -ForegroundColor Green
+                        } catch {
+                            Write-Host "Failed to update $id : $_" -ForegroundColor Red
+                        }
                     }
                 }
             }
         }
+
+        # 🔽 Reinstall Google Chrome after updates are finished
+        Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
+        try {
+            $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
+            if ($chrome) {
+                Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
+                winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+                Start-Sleep -Seconds 5
+            } else {
+                Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
+            }
+
+            Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
+            winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
+            Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
+        }
+        catch {
+            Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
+        }
+
     } catch {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
+
 
 function Prohibited-Files {
     param (
@@ -751,18 +772,20 @@ function Application-Security-Settings {
         Write-Host "Enabling SmartScreen for Windows..." -ForegroundColor Yellow
         Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
 
-        # Enable Controlled Folder Access (Protect user files from ransomware)
+        # Enable Controlled Folder Access
         Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
         Set-MpPreference -EnableControlledFolderAccess Enabled
 
-        # Disallow unsigned PowerShell scripts (only if not overridden by Group Policy)
+        # Disallow unsigned PowerShell scripts (own try/catch block)
+        Write-Host "Checking PowerShell execution policy..." -ForegroundColor Yellow
         try {
             $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
             if ($currentPolicy -ne "AllSigned") {
                 Write-Host "Setting PowerShell execution policy to AllSigned..." -ForegroundColor Yellow
                 Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
                 Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
-            } else {
+            }
+            else {
                 Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
             }
         }
@@ -770,21 +793,29 @@ function Application-Security-Settings {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
 
-        # Disable Windows Optional Features not needed
-        Write-Host "Disabling unnecessary optional Windows features..." -ForegroundColor Yellow
-
-        # Remove Internet Explorer if installed
+        # --- Remove Internet Explorer ---
+        Write-Host "Checking for Internet Explorer installation..." -ForegroundColor Yellow
         $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
-        if ($ieFeature.State -eq "Enabled") {
-            Write-Host "Internet Explorer is installed. Attempting to uninstall..." -ForegroundColor Yellow
-            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -NoRestart -ErrorAction SilentlyContinue
-            Write-Host "Internet Explorer has been uninstalled. A restart is required to complete removal." -ForegroundColor Green
-        } else {
-            Write-Host "Internet Explorer is not installed or already disabled." -ForegroundColor Green
+        if ($ieFeature -and $ieFeature.State -eq "Enabled") {
+            Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor Red
+            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction SilentlyContinue
+        }
+        elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
+            Write-Host "Internet Explorer is already disabled." -ForegroundColor Green
+        }
+        else {
+            Write-Host "Internet Explorer feature not found on this system." -ForegroundColor Green
         }
 
         # Disable SMB1 protocol
-        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart -ErrorAction SilentlyContinue
+        Write-Host "Disabling SMB1 protocol (restart required)..." -ForegroundColor Yellow
+        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -Restart -ErrorAction SilentlyContinue
+        Write-Host "SMB1 protocol disabled (if it was enabled)." -ForegroundColor Green
+
+        # Disable Ctrl+Alt+Del requirement
+        Write-Host "Disabling Ctrl+Alt+Del requirement at login..." -ForegroundColor Yellow
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1 -Type DWord
+        Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
 
         Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
     }
@@ -792,6 +823,7 @@ function Application-Security-Settings {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
 }
+
 
 # Function is now defined but NOT executed automatically
 # To run it manually, type:
