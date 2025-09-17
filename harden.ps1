@@ -428,6 +428,13 @@ function Account-Policies {
 function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
 
+    # Ask user for CTRL+ALT+DEL requirement
+    do {
+        $userInput = Read-Host "Do you want to require CTRL+ALT+DEL at login? (Y/N)"
+    } while ($userInput -notmatch '^[YyNn]$')
+
+    $disableCADValue = if ($userInput -match '^[Yy]$') { '0' } else { '1' }
+
     # Paths for exported and modified security templates
     $exportedFile = "C:\Windows\Security\Temp\secpol_export.inf"
     $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
@@ -455,35 +462,32 @@ function Local-Policies {
             -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
             -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
 
-        # Update or add the DisableCAD setting under [System Access]
-        if ($content -match '^\[System Access\]') {
-            $index = ($content | Select-String '^\[System Access\]' | Select-Object -First 1).LineNumber
-            $index = $index - 1  # zero-based index
-            $systemAccessBlock = $content[$index..($content.Length - 1)]
-            $disableCADIndex = ($systemAccessBlock | Select-String '^DisableCAD\s*=').LineNumber
-
-            if ($disableCADIndex) {
-                # Replace existing DisableCAD value
-                $actualIndex = $index + $disableCADIndex[0] - 1
-                $content[$actualIndex] = 'DisableCAD = 0'
+        # --- Add or modify "Do not require CTRL+ALT+DEL" setting ---
+        $systemAccessIndex = ($content | Select-String '^\[System Access\]' | Select-Object -First 1).LineNumber
+        if ($systemAccessIndex) {
+            $systemAccessIndex = $systemAccessIndex - 1
+            $disableCADLine = ($content | Select-String '^DisableCAD\s*=').LineNumber
+            if ($disableCADLine) {
+                $actualLine = $disableCADLine[0] - 1
+                $content[$actualLine] = "DisableCAD = $disableCADValue"
             } else {
-                # Add DisableCAD setting below [System Access]
-                $content = $content[0..$index] + 'DisableCAD = 0' + $content[($index + 1)..($content.Length - 1)]
+                $content = $content[0..$systemAccessIndex] + "DisableCAD = $disableCADValue" + $content[($systemAccessIndex + 1)..($content.Count - 1)]
             }
         } else {
-            # No [System Access] section found, append it
             $content += ''
             $content += '[System Access]'
-            $content += 'DisableCAD = 0'
+            $content += "DisableCAD = $disableCADValue"
         }
 
-        # Save modified INF
+        # Save modified file
         $content | Set-Content $modifiedFile
-        Write-Host "Security privileges modified successfully." -ForegroundColor $EmphasizedNameColor
+        Write-Host "Security privileges and CTRL+ALT+DEL policy modified successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
         Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
+
+    $seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
 
     Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
     secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg $modifiedFile /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
@@ -494,6 +498,7 @@ function Local-Policies {
         Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
     }
 }
+
 
 function Defensive-Countermeasures {
     Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
