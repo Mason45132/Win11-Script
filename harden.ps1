@@ -573,6 +573,7 @@ function Uncategorized-OS-Settings {
         Write-Host "Disabling file sharing on C:\ drive..." -ForegroundColor Yellow
         $shareName = "C$"
 
+        # Remove admin share if it exists
         if (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) {
             Remove-SmbShare -Name $shareName -Force
             Write-Host "✅ File sharing disabled for C:\ drive." -ForegroundColor Green
@@ -585,6 +586,8 @@ function Uncategorized-OS-Settings {
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
+
+
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
@@ -687,7 +690,7 @@ function Application-Updates {
     }
 
     # Refresh environment in case winget was just installed
- $env:Path += ";$($env:LOCALAPPDATA)\Microsoft\WindowsApps"
+    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
 
     # Confirm winget is now available
     if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
@@ -744,7 +747,8 @@ function Application-Updates {
             Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
             winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
             Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
         }
 
