@@ -403,29 +403,8 @@ function Account-Policies {
         return
     }
 }
-function Local-Policies {}
-    Write-Host "`n--- Starting: Local-Policies ---`n"
-    # Define paths for security config files
-$exportedFile = "C:\Windows\Security\Temp\secpol_original.inf"
-$modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
 
-# Create the temp folder if it doesn't exist
-if (-not (Test-Path "C:\Windows\Security\Temp")) {
-    New-Item -Path "C:\Windows\Security\Temp" -ItemType Directory | Out-Null
-}
-
-# Export current security policy to the file
-Write-Host "Exporting current security policy to: $exportedFile" -ForegroundColor $PromptColor
-try {
-    secedit /export /cfg $exportedFile | Out-Null
-    Write-Host "Security policy exported successfully." -ForegroundColor $EmphasizedNameColor
-} catch {
-    Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
-    return
-}
-
-    # Modify the security privileges
-    function Local-Policies {
+function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
 
     # Paths for exported and modified security templates
