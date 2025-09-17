@@ -524,6 +524,7 @@ function Defensive-Countermeasures {
             Remove-Item -Path $keyPath -Recurse -Force
             Write-Host "✅ Removed Group Policy override." -ForegroundColor Green
         }
+    
     } catch {
         Write-Host "⚠️ Could not remove policy key (may require Tamper Protection OFF)." -ForegroundColor Yellow
     }
@@ -534,7 +535,7 @@ function Defensive-Countermeasures {
         Write-Host "✅ Real-time monitoring requested." -ForegroundColor Green
     } catch {
         Write-Host "❌ Failed to enable Real-Time Protection: $_" -ForegroundColor Red
-    }
+            }
 
     # Final status check
     $status = Get-MpComputerStatus
@@ -544,7 +545,7 @@ function Defensive-Countermeasures {
         Write-Host "🔴 Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
     }
     Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
-}
+    }
 
 function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
