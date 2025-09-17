@@ -384,6 +384,27 @@ do {
     }
 } while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
 
+# === Prompt to add a new Administrator account separately ===
+Write-Host "`nWould you like to add a new Administrator account? [Y/n] (default N)" -ForegroundColor $PromptColor
+$addAdminAnswer = Read-Host
+
+if ($addAdminAnswer -eq 'y' -or $addAdminAnswer -eq 'Y') {
+    $newAdminUsername = Read-Host "Enter the new administrator username"
+    $newAdminFullName = Read-Host "Enter the full name (can be blank)"
+
+    try {
+        $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+        New-LocalUser -Name $newAdminUsername -Password $securePassword -FullName $newAdminFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+        Write-Host "Administrator account '$newAdminUsername' created successfully." -ForegroundColor $EmphasizedNameColor
+
+        net user $newAdminUsername /logonpasswordchg:yes
+        Add-LocalGroupMember -Group "Administrators" -Member $newAdminUsername
+        Write-Host "User '$newAdminUsername' added to Administrators group and must change password at next login." -ForegroundColor $KeptLineColor
+    } catch {
+        Write-Host "Failed to create administrator account: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    }
+}
+
     Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
 
