@@ -174,27 +174,70 @@ function Enable-Updates {
 
     if (-not $updates) {
         Write-Host "No updates available." -ForegroundColor $EmphasizedNameColor
-        return
+    } else {
+        Write-Host "`nFound $($updates.Count) update(s)." -ForegroundColor $EmphasizedNameColor
+
+        # Loop through each update and ask before installing
+        foreach ($update in $updates) {
+            Write-Host "`nUpdate: $($update.Title)" -ForegroundColor $PromptColor
+            $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
+
+            if ($answer -eq 'n' -or $answer -eq 'N') {
+                Write-Host "Skipped: $($update.Title)" -ForegroundColor $RemovedLineColor
+                continue
+            }
+
+            try {
+                Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
+                Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+                Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
+            } catch {
+                Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        }
     }
 
-    Write-Host "`nFound $($updates.Count) update(s)." -ForegroundColor $EmphasizedNameColor
+    # --- Chrome Installation/Update Check ---
+    Write-Host "`n--- Checking Google Chrome ---" -ForegroundColor $HeaderColor
 
-    # Loop through each update and ask before installing
-    foreach ($update in $updates) {
-        Write-Host "`nUpdate: $($update.Title)" -ForegroundColor $PromptColor
-        $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
+    $chromePaths = @(
+        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
+    )
+    $chromeInstalled = $chromePaths | Where-Object { Test-Path $_ }
 
-        if ($answer -eq 'n' -or $answer -eq 'N') {
-            Write-Host "Skipped: $($update.Title)" -ForegroundColor $RemovedLineColor
-            continue
-        }
+    if (-not $chromeInstalled) {
+        Write-Host "Google Chrome is not installed. Installing now..." -ForegroundColor $PromptColor
+        $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+        $tempInstaller = "$env:TEMP\chrome_installer.exe"
 
         try {
-            Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
-            Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
-            Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
+            Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
+            Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
+            Write-Host "Google Chrome has been installed." -ForegroundColor $KeptLineColor
         } catch {
-            Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to install Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        } finally {
+            if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
+        }
+    } else {
+        Write-Host "Google Chrome is already installed. Checking for updates..." -ForegroundColor $PromptColor
+
+        # Trigger Chrome's built-in updater silently
+        $chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
+        if (-not (Test-Path $chromeUpdater)) {
+            $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
+        }
+
+        if (Test-Path $chromeUpdater) {
+            try {
+                Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
+                Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
+            } catch {
+                Write-Host "Failed to update Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        } else {
+            Write-Host "Chrome updater not found. Skipping update." -ForegroundColor $WarningColor
         }
     }
 
