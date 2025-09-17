@@ -438,97 +438,42 @@ function Account-Policies {
 function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
 
-    Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
+    # Define the export file path
+    $exportedFile = "$env:TEMP\secpol.inf"
+    $modifiedFile = "$env:TEMP\secpol_modified.inf"
+
+    Write-Host "Modifying security privileges..." -ForegroundColor Cyan
+
     try {
-        $content = Get-Content $exportedFile
-if (-not $exportFile) {
-    Write-Error "exportFile path is null or empty"
-    exit
-}
+        # Export current USER_RIGHTS policy to the export file
+        secedit /export /cfg $exportedFile /areas USER_RIGHTS
 
-if (-not (Test-Path $exportFile)) {
-    Write-Error "Exported file does not exist at path: $exportFile"
-    exit
-}
-        # Modify privilege rights
-        $content = $content `
-            -replace '\(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
-            -replace '\(SeDenyNetworkLogonRight.*$', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
-            -replace '\(SeCreateTokenPrivilege.*$', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
-            -replace '\(SeCreateGlobalPrivilege.*$', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
-            -replace '\(SeRemoteShutdownPrivilege.*$', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
-            -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
-            -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
-    # Define paths
-$backupDir = "$env:SystemRoot\security\backup"
-$backupFile = Join-Path $backupDir "secedit_backup.sdb"
-$exportFile = "$env:TEMP\secpol.inf"
-$modifiedFile = "$env:TEMP\secpol_modified.inf"
-
-# Ensure backup directory exists
-if (-not (Test-Path $backupDir)) {
-    New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
-}
-
-Write-Host "Backing up current security policy database..." -ForegroundColor Cyan
-# Backup the current security policy database
-try {
-    Copy-Item "$env:SystemRoot\security\Database\secedit.sdb" $backupFile -Force
-    Write-Host "Backup saved to $backupFile" -ForegroundColor Green
-} catch {
-    Write-Warning "Failed to backup security policy database: $_"
-    exit 1
-}
-
-Write-Host "Exporting local security policy to $exportFile..." -ForegroundColor Cyan
-# Export the local security policy to a .inf file
-$exportArgs = "/export /cfg `"$exportFile`" /areas USER_RIGHTS"
-$exportResult = secedit.exe $exportArgs
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Failed to export security policy."
-    exit 1
-}
-
-Write-Host "Modifying SeTakeOwnershipPrivilege assignment..." -ForegroundColor Cyan
-# Read the exported file content
-$content = Get-Content $exportFile
-
-# Replace SeTakeOwnershipPrivilege line
-# Match line starting with SeTakeOwnershipPrivilege, replace its value to *S-1-5-32-544
-$modifiedContent = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
-
-# Save modified content to new file
-$modifiedContent | Set-Content $modifiedFile -Encoding ASCII
-
-Write-Host "Importing modified security policy..." -ForegroundColor Cyan
-# Import the modified policy
-$importArgs = "/configure /db secedit.sdb /cfg `"$modifiedFile`" /areas USER_RIGHTS /overwrite"
-$importResult = secedit.exe $importArgs
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Failed to import modified security policy."
-    exit 1
-}
-
-Write-Host "Security policy updated successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "Error modifying security privileges: $_" -ForegroundColor Red
-        return
-    }
-    # Conditional reboot
-    if ($rebootNeeded) {
-        $rebootInput = Read-Host "The setting change requires a reboot. Reboot now? (Y/N)"
-        if ($rebootInput -match '^[Yy]$') {
-            Write-Host "Rebooting now..." -ForegroundColor Cyan
-            Restart-Computer -Force
-        } else {
-            Write-Host "Please remember to reboot later for the changes to take effect." -ForegroundColor Yellow
+        # Ensure the export file was created
+        if (-not (Test-Path $exportedFile)) {
+            throw "Exported file not found at $exportedFile"
         }
+
+        # Read the content of the export file
+        $content = Get-Content $exportedFile
+
+        # Replace the SeTakeOwnershipPrivilege line
+        $content = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
+
+        # Save the modified content
+        $content | Set-Content $modifiedFile -Encoding ASCII
+
+        # Import the modified security policy
+        secedit /configure /db secedit.sdb /cfg $modifiedFile /areas USER_RIGHTS /overwrite
+
+        Write-Host "Security privileges modified successfully." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Error modifying security privileges: $_" -ForegroundColor Red
     }
 
     Write-Host "`n--- Local-Policies Completed ---`n"
 }
+
 
 function Defensive-Countermeasures {
     Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
