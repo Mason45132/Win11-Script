@@ -531,16 +531,36 @@ function Defensive-Countermeasures {
             Set-ItemProperty -Path $path -Name "BlockContentExecutionFromInternet" -Value 1
         }
 
-        # Optionally enable ASR rule
+        # Enable Attack Surface Reduction (ASR) rule
         Write-Host "Enabling Attack Surface Reduction (ASR) rule..." -ForegroundColor Yellow
         Add-MpPreference -AttackSurfaceReductionRules_Ids "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" -AttackSurfaceReductionRules_Actions Enabled
+
+        # Ensure Windows Update service is enabled
+        Write-Host "Ensuring Windows Update service is enabled..." -ForegroundColor Yellow
+        $serviceName = "wuauserv"
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+
+        if ($service) {
+            if ($service.StartType -ne "Automatic") {
+                Set-Service -Name $serviceName -StartupType Automatic
+                Write-Host "Set Windows Update service startup type to 'Automatic'."
+            }
+
+            if ($service.Status -ne "Running") {
+                Start-Service -Name $serviceName
+                Write-Host "Started Windows Update service."
+            } else {
+                Write-Host "Windows Update service is already running."
+            }
+        } else {
+            Write-Host "Windows Update service not found!" -ForegroundColor Red
+        }
 
         Write-Host "`nDefensive countermeasures applied successfully." -ForegroundColor Green
     } catch {
         Write-Host "Error applying countermeasures: $_" -ForegroundColor Red
     }
 }
-
 
 function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n"
