@@ -438,26 +438,6 @@ function Account-Policies {
 function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
 
-    # Ask user for CTRL+ALT+DEL requirement
-    do {
-        $userInput = Read-Host "Do you want to require CTRL+ALT+DEL at login? (Y/N)"
-    } while ($userInput -notmatch '^[YyNn]$')
-
-    $disableCADValue = if ($userInput -match '^[Yy]$') { '0' } else { '1' }
-
-    # Paths for exported and modified security templates
-    $exportedFile = "C:\Windows\Security\Temp\secpol_export.inf"
-    $modifiedFile = "C:\Windows\Security\Temp\secpol_modified.inf"
-
-    # Make sure the folder exists
-    if (-not (Test-Path "C:\Windows\Security\Temp")) {
-        New-Item -Path "C:\Windows\Security\Temp" -ItemType Directory -Force | Out-Null
-    }
-
-    # Export the current security policy
-    Write-Host "Exporting current security policy..." -ForegroundColor $HeaderColor
-    secedit /export /cfg $exportedFile /quiet
-
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
         $content = Get-Content $exportedFile
@@ -471,45 +451,63 @@ function Local-Policies {
             -replace '\(SeRemoteShutdownPrivilege.*$', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
             -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
             -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
+    # Define paths
+$backupDir = "$env:SystemRoot\security\backup"
+$backupFile = Join-Path $backupDir "secedit_backup.sdb"
+$exportFile = "$env:TEMP\secpol.inf"
+$modifiedFile = "$env:TEMP\secpol_modified.inf"
+
+# Ensure backup directory exists
+if (-not (Test-Path $backupDir)) {
+    New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+}
+
+Write-Host "Backing up current security policy database..." -ForegroundColor Cyan
+# Backup the current security policy database
+try {
+    Copy-Item "$env:SystemRoot\security\Database\secedit.sdb" $backupFile -Force
+    Write-Host "Backup saved to $backupFile" -ForegroundColor Green
+} catch {
+    Write-Warning "Failed to backup security policy database: $_"
+    exit 1
+}
+
+Write-Host "Exporting local security policy to $exportFile..." -ForegroundColor Cyan
+# Export the local security policy to a .inf file
+$exportArgs = "/export /cfg `"$exportFile`" /areas USER_RIGHTS"
+$exportResult = secedit.exe $exportArgs
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to export security policy."
+    exit 1
+}
+
+Write-Host "Modifying SeTakeOwnershipPrivilege assignment..." -ForegroundColor Cyan
+# Read the exported file content
+$content = Get-Content $exportFile
+
+# Replace SeTakeOwnershipPrivilege line
+# Match line starting with SeTakeOwnershipPrivilege, replace its value to *S-1-5-32-544
+$modifiedContent = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
+
+# Save modified content to new file
+$modifiedContent | Set-Content $modifiedFile -Encoding ASCII
+
+Write-Host "Importing modified security policy..." -ForegroundColor Cyan
+# Import the modified policy
+$importArgs = "/configure /db secedit.sdb /cfg `"$modifiedFile`" /areas USER_RIGHTS /overwrite"
+$importResult = secedit.exe $importArgs
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to import modified security policy."
+    exit 1
+}
+
+Write-Host "Security policy updated successfully." -ForegroundColor Green
     } catch {
-        # Ask user for CTRL+ALT+DEL requirement
-    do {
-        $userInput = Read-Host "Do you want to require CTRL+ALT+DEL at login? (Y/N)"
-    } while ($userInput -notmatch '^[YyNn]$')
-
-    $disableCADValue = if ($userInput -match '^[Yy]$') { 0 } else { 1 }
-    $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-
-    $rebootNeeded = $false
-
-    try {
-        Write-Host "Checking current CTRL+ALT+DEL policy..." -ForegroundColor Cyan
-        $currentValue = Get-ItemProperty -Path $registryPath -Name "DisableCAD" -ErrorAction SilentlyContinue
-
-        if ($null -eq $currentValue -or $currentValue.DisableCAD -ne $disableCADValue) {
-            Write-Host "Updating CTRL+ALT+DEL policy..." -ForegroundColor Cyan
-
-            Set-ItemProperty -Path $registryPath `
-                             -Name "DisableCAD" `
-                             -Value $disableCADValue `
-                             -Type DWord
-
-            if ($disableCADValue -eq 0) {
-                Write-Host "CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
-            } else {
-                Write-Host "CTRL+ALT+DEL requirement has been DISABLED." -ForegroundColor Yellow
-            }
-
-            $rebootNeeded = $true
-        } else {
-            Write-Host "CTRL+ALT+DEL policy is already set as requested. No changes made." -ForegroundColor DarkGray
-        }
-
-    } catch {
-        Write-Host "Failed to update CTRL+ALT+DEL setting: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Error modifying security privileges: $_" -ForegroundColor Red
         return
     }
-
     # Conditional reboot
     if ($rebootNeeded) {
         $rebootInput = Read-Host "The setting change requires a reboot. Reboot now? (Y/N)"
@@ -523,7 +521,7 @@ function Local-Policies {
 
     Write-Host "`n--- Local-Policies Completed ---`n"
 }
-}
+
 function Defensive-Countermeasures {
     Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
 
