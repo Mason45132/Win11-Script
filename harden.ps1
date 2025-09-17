@@ -514,72 +514,34 @@ function Local-Policies {
 }
 
 function Defensive-Countermeasures {
-    Write-Host "`n--- Enabling Windows Defender Real-Time Protection ---`n" -ForegroundColor Cyan
+   function Enable-DefenderRealtime {
+    Write-Host "`n🔧 Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
 
+    # Try to remove Group Policy block (optional)
     try {
-        # Ensure Defender service is enabled
-        $serviceName = "WinDefend"
-        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-
-        if ($service) {
-            if ($service.StartType -ne "Automatic") {
-                Set-Service -Name $serviceName -StartupType Automatic
-                Write-Host "Set Windows Defender service startup type to 'Automatic'." -ForegroundColor Yellow
-            }
-
-            if ($service.Status -ne "Running") {
-                Start-Service -Name $serviceName
-                Write-Host "Started Windows Defender service." -ForegroundColor Yellow
-            } else {
-                Write-Host "Windows Defender service is already running." -ForegroundColor Green
-            }
-        } else {
-            Write-Host "❌ Windows Defender service not found!" -ForegroundColor Red
-            return
-        }
-
-        # Enable real-time protection
-        Write-Host "Enabling real-time protection..." -ForegroundColor Yellow
-        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-
-        # --- Check for Tamper Protection ---
-        $tamperKey = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features"
-        $tamperStatus = $null
-        if (Test-Path $tamperKey) {
-            try {
-                $tamperValue = (Get-ItemProperty -Path $tamperKey -Name "TamperProtection" -ErrorAction SilentlyContinue).TamperProtection
-                if ($tamperValue -eq 5) { $tamperStatus = "On" }
-                elseif ($tamperValue -eq 0) { $tamperStatus = "Off" }
-            } catch { }
-        }
-
-        if ($tamperStatus -eq "On") {
-            Write-Host "⚠️ Tamper Protection is ON. This prevents scripts from enabling Defender settings." -ForegroundColor Magenta
-            Write-Host "   ➡ Turn it off manually: Windows Security > Virus & threat protection > Manage settings > Tamper Protection." -ForegroundColor Yellow
-        }
-
-        # --- Check for Group Policy override ---
-        $policyKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
-        if (Test-Path $policyKey) {
-            $policyValues = Get-ItemProperty -Path $policyKey
-            if ($policyValues.DisableRealtimeMonitoring -eq 1) {
-                Write-Host "⚠️ Group Policy is set to DISABLE real-time protection." -ForegroundColor Magenta
-                Write-Host "   ➡ If this is a managed PC, you’ll need to change the policy in Group Policy Editor or via your admin." -ForegroundColor Yellow
-            }
-        }
-
-        # --- Verify Defender status ---
-        $status = Get-MpComputerStatus
-        if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
-            Write-Host "`n✅ Real-time protection is ENABLED." -ForegroundColor Green
-        } else {
-            Write-Host "`n❌ Real-time protection is still NOT enabled." -ForegroundColor Red
-            if (-not $status.AntivirusEnabled) {
-                Write-Host "   ➡ Another antivirus may be installed and taking over." -ForegroundColor Magenta
-            }
+        $keyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+        if (Test-Path $keyPath) {
+            Remove-Item -Path $keyPath -Recurse -Force
+            Write-Host "✅ Removed Group Policy override." -ForegroundColor Green
         }
     } catch {
-        Write-Host "Error enabling Windows Defender real-time protection: $_" -ForegroundColor Red
+        Write-Host "⚠️ Could not remove policy key (may require Tamper Protection OFF)." -ForegroundColor Yellow
+    }
+
+    # Attempt to enable Real-Time Monitoring
+    try {
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        Write-Host "✅ Real-time monitoring requested." -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to enable Real-Time Protection: $_" -ForegroundColor Red
+    }
+
+    # Final status check
+    $status = Get-MpComputerStatus
+    if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
+        Write-Host "🟢 Defender Real-Time Protection is ENABLED." -ForegroundColor Green
+    } else {
+        Write-Host "🔴 Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
     }
 }
 
@@ -608,7 +570,7 @@ function Uncategorized-OS-Settings {
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
-
+}
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
