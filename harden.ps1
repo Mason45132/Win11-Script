@@ -549,7 +549,7 @@ function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 
     try {
-        # --- Disable Remote Assistance ---
+        # Disable Remote Assistance
         Write-Host "Disabling Remote Assistance connections..." -ForegroundColor Yellow
         $raKey = "HKLM:\System\CurrentControlSet\Control\Remote Assistance"
         if (-not (Test-Path $raKey)) {
@@ -557,32 +557,35 @@ function Uncategorized-OS-Settings {
         }
         Set-ItemProperty -Path $raKey -Name fAllowToGetHelp -Value 0 -Force
 
+        # Verify
         $raStatus = (Get-ItemProperty -Path $raKey -Name fAllowToGetHelp).fAllowToGetHelp
         if ($raStatus -eq 0) {
             Write-Host "✅ Remote Assistance is disabled." -ForegroundColor Green
         } else {
             Write-Host "⚠️ Failed to disable Remote Assistance." -ForegroundColor Red
         }
+    } catch {
+        Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
+    }
 
-        # --- Disable File Sharing on C: ---
-        Write-Host "Disabling file sharing on C: drive..." -ForegroundColor Yellow
-        $share = Get-SmbShare -Name "C$" -ErrorAction SilentlyContinue
-        if ($share) {
-            try {
-                Remove-SmbShare -Name "C$" -Force -ErrorAction Stop
-                Write-Host "✅ File sharing for C: drive disabled (C$ share removed)." -ForegroundColor Green
-            } catch {
-                Write-Host "⚠️ Could not remove C$ share: $_" -ForegroundColor Red
-            }
+    try {
+        # File sharing disabled for C folder | Uncategorized OS Settings
+        Write-Host "Disabling file sharing on C:\ drive..." -ForegroundColor Yellow
+        $shareName = "C$"
+
+        # Remove admin share if it exists
+        if (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) {
+            Remove-SmbShare -Name $shareName -Force
+            Write-Host "✅ File sharing disabled for C:\ drive." -ForegroundColor Green
         } else {
-            Write-Host "ℹ️ No administrative C$ share found (already disabled)." -ForegroundColor Cyan
+            Write-Host "ℹ️ No file share found for C:\ drive (already disabled)." -ForegroundColor Cyan
         }
     } catch {
-        Write-Host "Error applying Uncategorized OS Settings: $_" -ForegroundColor Red
+        Write-Host "Error disabling file sharing for C:\ drive: $_" -ForegroundColor Red
     }
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
-}  # <-- closing brace for the function
+}
 
 
 
