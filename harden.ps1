@@ -543,6 +543,7 @@ function Defensive-Countermeasures {
     } else {
         Write-Host "🔴 Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
     }
+    Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
 }
 
 function Uncategorized-OS-Settings {
