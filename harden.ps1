@@ -514,7 +514,7 @@ function Local-Policies {
 }
 
 function Defensive-Countermeasures {
-   function Enable-DefenderRealtime {
+   
     Write-Host "`n🔧 Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
 
     # Try to remove Group Policy block (optional)
@@ -570,7 +570,7 @@ function Uncategorized-OS-Settings {
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
-}
+
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
