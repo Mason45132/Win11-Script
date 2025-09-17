@@ -410,20 +410,30 @@ if ($addAdminAnswer -eq 'y' -or $addAdminAnswer -eq 'Y') {
 
 function Account-Policies {
     Write-Host "`n--- Starting: Account Policies ---`n"
-    Write-Host "Setting maximum password age to $MaxPasswordAge days..." #1CyberPatriot!
-    net accounts /maxpwage:$MaxPasswordAge
-    Write-Host "`n--- Starting: Setting Account Policies ---`n" -ForegroundColor Cyan
 
-    # Set the maximum password age using the net accounts command
+    # Set the maximum password age
+    Write-Host "Setting maximum password age to $MaxPasswordAge days..." -ForegroundColor Yellow
     try {
-        Write-Host "Setting Maximum Password Age to $MaxPasswordAge days..." -ForegroundColor Yellow
         net accounts /MAXPWAGE:$MaxPasswordAge | Out-Null
         Write-Host "Successfully set Maximum Password Age to $MaxPasswordAge days." -ForegroundColor Green
     } catch {
-        Write-Host "Failed to export security policy: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "Failed to set Maximum Password Age: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
+
+    # Set the minimum password length
+    Write-Host "Setting minimum password length to $MinPasswordLength characters..." -ForegroundColor Yellow
+    try {
+        net accounts /MINPWLEN:$MinPasswordLength | Out-Null
+        Write-Host "Successfully set Minimum Password Length to $MinPasswordLength characters." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Minimum Password Length: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    Write-Host "`n--- Finished: Setting Account Policies ---`n" -ForegroundColor Cyan
 }
+
 
 function Local-Policies {
     Write-Host "`n--- Starting: Local-Policies ---`n"
