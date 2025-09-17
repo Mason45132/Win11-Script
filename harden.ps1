@@ -443,32 +443,58 @@ function Local-Policies {
 
     Write-Host "Modifying security privileges..." -ForegroundColor $HeaderColor
     try {
-        (Get-Content $exportedFile) `
+        $content = Get-Content $exportedFile
+
+        # Modify privilege rights
+        $content = $content `
             -replace '\(SeTrustedCredManAccessPrivilege.*$', 'SeTrustedCredManAccessPrivilege = *S-1-5-32-544' `
             -replace '\(SeDenyNetworkLogonRight.*$', 'SeDenyNetworkLogonRight = *S-1-1-0,*S-1-5-32-546' `
             -replace '\(SeCreateTokenPrivilege.*$', 'SeCreateTokenPrivilege = *S-1-5-32-544' `
             -replace '\(SeCreateGlobalPrivilege.*$', 'SeCreateGlobalPrivilege = *S-1-5-32-544' `
             -replace '\(SeRemoteShutdownPrivilege.*$', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
             -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
-            -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544' `
-            | Set-Content $modifiedFile
+            -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
+
+        # Update or add the DisableCAD setting under [System Access]
+        if ($content -match '^\[System Access\]') {
+            $index = ($content | Select-String '^\[System Access\]' | Select-Object -First 1).LineNumber
+            $index = $index - 1  # zero-based index
+            $systemAccessBlock = $content[$index..($content.Length - 1)]
+            $disableCADIndex = ($systemAccessBlock | Select-String '^DisableCAD\s*=').LineNumber
+
+            if ($disableCADIndex) {
+                # Replace existing DisableCAD value
+                $actualIndex = $index + $disableCADIndex[0] - 1
+                $content[$actualIndex] = 'DisableCAD = 0'
+            } else {
+                # Add DisableCAD setting below [System Access]
+                $content = $content[0..$index] + 'DisableCAD = 0' + $content[($index + 1)..($content.Length - 1)]
+            }
+        } else {
+            # No [System Access] section found, append it
+            $content += ''
+            $content += '[System Access]'
+            $content += 'DisableCAD = 0'
+        }
+
+        # Save modified INF
+        $content | Set-Content $modifiedFile
         Write-Host "Security privileges modified successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
         Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
         return
     }
-$seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
 
-Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
+    Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
+    secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg $modifiedFile /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
 
-secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg "C:\Windows\Security\Temp\secpol_modified.inf" /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
-} else {
-    Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
-    Write-Host "Error Output:`n$seceditOutput" -ForegroundColor $WarningColor
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Security policy updated successfully." -ForegroundColor $EmphasizedNameColor
+    } else {
+        Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
+    }
 }
-}
+
 function Defensive-Countermeasures {
     Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
 
