@@ -461,34 +461,35 @@ function Local-Policies {
             -replace '\(SeRemoteShutdownPrivilege.*$', 'SeRemoteShutdownPrivilege = *S-1-5-32-544' `
             -replace '\(SeLoadDriverPrivilege.*$', 'SeLoadDriverPrivilege = *S-1-5-32-544' `
             -replace '\(SeSecurityPrivilege.*$', 'SeSecurityPrivilege = *S-1-5-32-544'
-
-        # --- Add or modify "Do not require CTRL+ALT+DEL" setting ---
-        $systemAccessIndex = ($content | Select-String '^\[System Access\]' | Select-Object -First 1).LineNumber
-        if ($systemAccessIndex) {
-            $systemAccessIndex = $systemAccessIndex - 1
-            $disableCADLine = ($content | Select-String '^DisableCAD\s*=').LineNumber
-            if ($disableCADLine) {
-                $actualLine = $disableCADLine[0] - 1
-                $content[$actualLine] = "DisableCAD = $disableCADValue"
-            } else {
-                $content = $content[0..$systemAccessIndex] + "DisableCAD = $disableCADValue" + $content[($systemAccessIndex + 1)..($content.Count - 1)]
-            }
-        } else {
-            $content += ''
-            $content += '[System Access]'
-            $content += "DisableCAD = $disableCADValue"
-        }
-
-        # Save modified file
-        $content | Set-Content $modifiedFile
-        Write-Host "Security privileges and CTRL+ALT+DEL policy modified successfully." -ForegroundColor $EmphasizedNameColor
     } catch {
-        Write-Host "Failed to modify security privileges: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        # Ask user for CTRL+ALT+DEL requirement
+    do {
+        $userInput = Read-Host "Do you want to require CTRL+ALT+DEL at login? (Y/N)"
+    } while ($userInput -notmatch '^[YyNn]$')
+
+    $disableCADValue = if ($userInput -match '^[Yy]$') { 0 } else { 1 }
+
+    try {
+        Write-Host "Setting CTRL+ALT+DEL policy..." -ForegroundColor Cyan
+
+        # Set the registry key directly
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+                         -Name "DisableCAD" `
+                         -Value $disableCADValue `
+                         -Type DWord
+
+        if ($disableCADValue -eq 0) {
+            Write-Host "CTRL+ALT+DEL requirement has been ENABLED." -ForegroundColor Green
+        } else {
+            Write-Host "CTRL+ALT+DEL requirement has been DISABLED." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "Failed to update CTRL+ALT+DEL setting: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    $seceditDBPath = "C:\Windows\Security\Database\secedit.sdb"
-
+    # Continue with any other local policy configurations as needed
+    Write-Host "`n--- Local-Policies Completed ---`n"
     Write-Host "Importing modified security policy..." -ForegroundColor $HeaderColor
     secedit /configure /db "C:\Windows\Security\Database\custom.sdb" /cfg $modifiedFile /overwrite /log "C:\Windows\Security\Logs\secedit.log" /quiet
 
@@ -498,8 +499,7 @@ function Local-Policies {
         Write-Host "Failed to import modified security policy." -ForegroundColor $WarningColor
     }
 }
-
-
+}
 function Defensive-Countermeasures {
     Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
 
