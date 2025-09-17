@@ -500,28 +500,44 @@ function Defensive-Countermeasures {
             return
         }
 
-        # Force real-time protection ON
+        # Enable real-time protection
         Write-Host "Enabling real-time protection..." -ForegroundColor Yellow
         Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
-        # Double-check via registry (some policies disable Defender)
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
-        if (Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "DisableRealtimeMonitoring" -ErrorAction SilentlyContinue
-            Write-Host "Removed policy key that disables real-time monitoring (if present)." -ForegroundColor Yellow
+        # --- Check for Tamper Protection ---
+        $tamperKey = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features"
+        $tamperStatus = $null
+        if (Test-Path $tamperKey) {
+            try {
+                $tamperValue = (Get-ItemProperty -Path $tamperKey -Name "TamperProtection" -ErrorAction SilentlyContinue).TamperProtection
+                if ($tamperValue -eq 5) { $tamperStatus = "On" }
+                elseif ($tamperValue -eq 0) { $tamperStatus = "Off" }
+            } catch { }
         }
 
-        # Verify status
+        if ($tamperStatus -eq "On") {
+            Write-Host "⚠️ Tamper Protection is ON. This prevents scripts from enabling Defender settings." -ForegroundColor Magenta
+            Write-Host "   ➡ Turn it off manually: Windows Security > Virus & threat protection > Manage settings > Tamper Protection." -ForegroundColor Yellow
+        }
+
+        # --- Check for Group Policy override ---
+        $policyKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
+        if (Test-Path $policyKey) {
+            $policyValues = Get-ItemProperty -Path $policyKey
+            if ($policyValues.DisableRealtimeMonitoring -eq 1) {
+                Write-Host "⚠️ Group Policy is set to DISABLE real-time protection." -ForegroundColor Magenta
+                Write-Host "   ➡ If this is a managed PC, you’ll need to change the policy in Group Policy Editor or via your admin." -ForegroundColor Yellow
+            }
+        }
+
+        # --- Verify Defender status ---
         $status = Get-MpComputerStatus
         if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
             Write-Host "`n✅ Real-time protection is ENABLED." -ForegroundColor Green
         } else {
-            Write-Host "`n⚠️ Real-time protection still NOT enabled." -ForegroundColor Red
+            Write-Host "`n❌ Real-time protection is still NOT enabled." -ForegroundColor Red
             if (-not $status.AntivirusEnabled) {
-                Write-Host "Hint: Another antivirus may be installed and taking over." -ForegroundColor Magenta
-            }
-            if (-not $status.RealTimeProtectionEnabled) {
-                Write-Host "Hint: Group Policy or Tamper Protection may be disabling Defender." -ForegroundColor Magenta
+                Write-Host "   ➡ Another antivirus may be installed and taking over." -ForegroundColor Magenta
             }
         }
     } catch {
