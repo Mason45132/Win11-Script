@@ -476,70 +476,101 @@ function Local-Policies {
 
 
 function Defensive-Countermeasures {
-    Write-Host "`n--- Applying Defensive Countermeasures ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Enabling Windows Defender Real-Time Protection ---`n" -ForegroundColor Cyan
 
     try {
-        # Enable PowerShell Logging
-        Write-Host "Enabling PowerShell logging..." -ForegroundColor Yellow
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockInvocationLogging" -Value 1 -Force
-
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Value 1 -Force
-
-        New-Item -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "C:\PSLogs" -Force
-
-        # Disable Windows Script Host
-        Write-Host "Disabling Windows Script Host..." -ForegroundColor Yellow
-        New-Item -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Force | Out-Null
-        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0 -Force
-
-        # Block Office Macros from Internet
-        Write-Host "Blocking Office macros from the internet..." -ForegroundColor Yellow
-        $officePaths = @("Word", "Excel", "PowerPoint")
-        foreach ($app in $officePaths) {
-            $path = "HKCU:\Software\Microsoft\Office\16.0\$app\Security"
-            New-Item -Path $path -Force | Out-Null
-            Set-ItemProperty -Path $path -Name "BlockContentExecutionFromInternet" -Value 1
-        }
-
-        # Enable Attack Surface Reduction (ASR) rule
-        Write-Host "Enabling Attack Surface Reduction (ASR) rule..." -ForegroundColor Yellow
-        Add-MpPreference -AttackSurfaceReductionRules_Ids "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" -AttackSurfaceReductionRules_Actions Enabled
-
-        # Ensure Windows Update service is enabled
-        Write-Host "Ensuring Windows Update service is enabled..." -ForegroundColor Yellow
-        $serviceName = "wuauserv"
+        # Ensure Defender service is enabled
+        $serviceName = "WinDefend"
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
         if ($service) {
             if ($service.StartType -ne "Automatic") {
                 Set-Service -Name $serviceName -StartupType Automatic
-                Write-Host "Set Windows Update service startup type to 'Automatic'."
+                Write-Host "Set Windows Defender service startup type to 'Automatic'." -ForegroundColor Yellow
             }
 
             if ($service.Status -ne "Running") {
                 Start-Service -Name $serviceName
-                Write-Host "Started Windows Update service."
+                Write-Host "Started Windows Defender service." -ForegroundColor Yellow
             } else {
-                Write-Host "Windows Update service is already running."
+                Write-Host "Windows Defender service is already running." -ForegroundColor Green
             }
         } else {
-            Write-Host "Windows Update service not found!" -ForegroundColor Red
+            Write-Host "❌ Windows Defender service not found!" -ForegroundColor Red
+            return
         }
 
-        Write-Host "`nDefensive countermeasures applied successfully." -ForegroundColor Green
+        # Enable real-time protection
+        Write-Host "Enabling real-time protection..." -ForegroundColor Yellow
+        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+
+        # --- Check for Tamper Protection ---
+        $tamperKey = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features"
+        $tamperStatus = $null
+        if (Test-Path $tamperKey) {
+            try {
+                $tamperValue = (Get-ItemProperty -Path $tamperKey -Name "TamperProtection" -ErrorAction SilentlyContinue).TamperProtection
+                if ($tamperValue -eq 5) { $tamperStatus = "On" }
+                elseif ($tamperValue -eq 0) { $tamperStatus = "Off" }
+            } catch { }
+        }
+
+        if ($tamperStatus -eq "On") {
+            Write-Host "⚠️ Tamper Protection is ON. This prevents scripts from enabling Defender settings." -ForegroundColor Magenta
+            Write-Host "   ➡ Turn it off manually: Windows Security > Virus & threat protection > Manage settings > Tamper Protection." -ForegroundColor Yellow
+        }
+
+        # --- Check for Group Policy override ---
+        $policyKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
+        if (Test-Path $policyKey) {
+            $policyValues = Get-ItemProperty -Path $policyKey
+            if ($policyValues.DisableRealtimeMonitoring -eq 1) {
+                Write-Host "⚠️ Group Policy is set to DISABLE real-time protection." -ForegroundColor Magenta
+                Write-Host "   ➡ If this is a managed PC, you’ll need to change the policy in Group Policy Editor or via your admin." -ForegroundColor Yellow
+            }
+        }
+
+        # --- Verify Defender status ---
+        $status = Get-MpComputerStatus
+        if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
+            Write-Host "`n✅ Real-time protection is ENABLED." -ForegroundColor Green
+        } else {
+            Write-Host "`n❌ Real-time protection is still NOT enabled." -ForegroundColor Red
+            if (-not $status.AntivirusEnabled) {
+                Write-Host "   ➡ Another antivirus may be installed and taking over." -ForegroundColor Magenta
+            }
+        }
     } catch {
-        Write-Host "Error applying countermeasures: $_" -ForegroundColor Red
+        Write-Host "Error enabling Windows Defender real-time protection: $_" -ForegroundColor Red
     }
 }
 
 function Uncategorized-OS-Settings {
-    Write-Host "`n--- Starting: Uncategorized OS Settings ---`n"
+    Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
+
+    try {
+        # Disable Remote Assistance
+        Write-Host "Disabling Remote Assistance connections..." -ForegroundColor Yellow
+        $raKey = "HKLM:\System\CurrentControlSet\Control\Remote Assistance"
+        if (-not (Test-Path $raKey)) {
+            New-Item -Path $raKey -Force | Out-Null
+        }
+        Set-ItemProperty -Path $raKey -Name fAllowToGetHelp -Value 0 -Force
+
+        # Verify
+        $raStatus = (Get-ItemProperty -Path $raKey -Name fAllowToGetHelp).fAllowToGetHelp
+        if ($raStatus -eq 0) {
+            Write-Host "✅ Remote Assistance is disabled." -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Failed to disable Remote Assistance." -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
+    }
+
+    Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
+
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
@@ -713,7 +744,7 @@ function Application-Updates {
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr")
+        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "users.txt")
     )
 
     Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
@@ -726,16 +757,28 @@ function Prohibited-Files {
                     Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
                     foreach ($file in $foundFiles) {
                         Write-Host $file.FullName -ForegroundColor Yellow
-                        $response = Read-Host "Do you want to delete this file? (Y/N)"
-                        if ($response -match '^[Yy]$') {
+
+                        if ($file.Name -ieq "users.txt") {
+                            # Always remove clear text password file without asking
                             try {
                                 Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                                Write-Host "🚫 Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
                             } catch {
                                 Write-Warning "Failed to delete $($file.FullName): $_"
                             }
                         } else {
-                            Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
+                            # Ask for confirmation before removing other prohibited files
+                            $response = Read-Host "Do you want to delete this file? (Y/N)"
+                            if ($response -match '^[Yy]$') {
+                                try {
+                                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                                    Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                                } catch {
+                                    Write-Warning "Failed to delete $($file.FullName): $_"
+                                }
+                            } else {
+                                Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
+                            }
                         }
                     }
                 } else {
@@ -746,6 +789,7 @@ function Prohibited-Files {
             }
         }
     }
+
     Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
 }
 
