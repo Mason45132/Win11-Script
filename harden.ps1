@@ -569,11 +569,10 @@ function Uncategorized-OS-Settings {
     }
 
     try {
-        # File sharing disabled for C folder | Uncategorized OS Settings
+        # File sharing disabled for C folder
         Write-Host "Disabling file sharing on C:\ drive..." -ForegroundColor Yellow
         $shareName = "C$"
 
-        # Remove admin share if it exists
         if (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) {
             Remove-SmbShare -Name $shareName -Force
             Write-Host "✅ File sharing disabled for C:\ drive." -ForegroundColor Green
@@ -588,24 +587,23 @@ function Uncategorized-OS-Settings {
 }
 
 
-
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
 
-    # Define the services to audit and disabled
-    $servicesToAudit = @( "BTAGService", "bthserv", "Browser", "MapsBroker", "lfsvc", "IISADMIN", "irmon", "lltdsvc", 
-    "LxssManager", "FTPSVC", "MSiSCSI", "sshd", "PNRPsvc", "p2psvc", "p2pimsvc", "PNRPAutoReg", 
-    "Spooler", "wercplsupport", "RasAuto", "SessionEnv", "TermService", "UmRdpService", "RpcLocator", 
-    "RemoteRegistry", "RemoteAccess", "LanmanServer", "simptcp", "SNMP", "sacsvr", "SSDPSRV", 
-    "upnphost", "WMSvc", "WerSvc", "Wecsvc", "WMPNetworkSvc", "icssvc", "WpnService", "PushToInstall", 
-    "WinRM", "W3SVC", "XboxGipSvc", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "NetTcpPortSharing",
-    "DNS", "LPDsvc", "RasMan", "SNMPTRAP", "TlntSvr", "TapiSrv", "WebClient", "LanmanWorkstation")
+    $servicesToAudit = @(
+        "BTAGService", "bthserv", "Browser", "MapsBroker", "lfsvc", "IISADMIN", "irmon", "lltdsvc", 
+        "LxssManager", "FTPSVC", "MSiSCSI", "sshd", "PNRPsvc", "p2psvc", "p2pimsvc", "PNRPAutoReg", 
+        "Spooler", "wercplsupport", "RasAuto", "SessionEnv", "TermService", "UmRdpService", "RpcLocator", 
+        "RemoteRegistry", "RemoteAccess", "LanmanServer", "simptcp", "SNMP", "sacsvr", "SSDPSRV", 
+        "upnphost", "WMSvc", "WerSvc", "Wecsvc", "WMPNetworkSvc", "icssvc", "WpnService", "PushToInstall", 
+        "WinRM", "W3SVC", "XboxGipSvc", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "NetTcpPortSharing",
+        "DNS", "LPDsvc", "RasMan", "SNMPTRAP", "TlntSvr", "TapiSrv", "WebClient", "LanmanWorkstation"
+    )
 
-    # Display the current status of the services
     Write-Host "`nCurrent status of services:`n"
-    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize
+    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue |
+        Select-Object Name, Status, StartType | Format-Table -AutoSize
 
-    # Loop through each service and attempt to disable it
     foreach ($service in $servicesToAudit) {
         try {
             $svc = Get-Service -Name $service -ErrorAction Stop
@@ -620,26 +618,25 @@ function Service-Auditing {
         }
     }
     
-    # Display the updated status of the service
     Write-Host "`nUpdated status of services:`n"
-    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize
+    Get-Service -Name $servicesToAudit -ErrorAction SilentlyContinue |
+        Select-Object Name, Status, StartType | Format-Table -AutoSize
 }
 
-function OS-Updates {
-    Write-Host "`n--- Starting: OS Updates ---`n" -ForegroundColor $HeaderColor
 
-    # Re-enable Windows Update service
+function OS-Updates {
+    Write-Host "`n--- Starting: OS Updates ---`n" -ForegroundColor Cyan
+
     try {
-        Write-Host "Re-enabling Windows Update service (wuauserv)..." -ForegroundColor $PromptColor
+        Write-Host "Re-enabling Windows Update service (wuauserv)..." -ForegroundColor Yellow
         Set-Service -Name wuauserv -StartupType Automatic -ErrorAction Stop
         Start-Service -Name wuauserv -ErrorAction Stop
-        Write-Host "Windows Update service is enabled and running." -ForegroundColor $EmphasizedNameColor
+        Write-Host "Windows Update service is enabled and running." -ForegroundColor Green
     } catch {
-        Write-Host "Failed to enable Windows Update service: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "Failed to enable Windows Update service: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    # Create DOCS folder for logs
     $desktopFolder = [Environment]::GetFolderPath("Desktop")
     $docsFolder = Join-Path $desktopFolder "DOCS"
     if (-not (Test-Path $docsFolder)) {
@@ -647,36 +644,32 @@ function OS-Updates {
     }
     $logFile = Join-Path $docsFolder ("UpdateLog-" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + ".txt")
 
-    # Trigger Windows Update in background with UsoClient
     try {
-        Write-Host "Triggering Windows Update scan, download, and install..." -ForegroundColor $PromptColor
+        Write-Host "Triggering Windows Update scan, download, and install..." -ForegroundColor Yellow
         UsoClient StartScan
         UsoClient StartDownload
         UsoClient StartInstall
         Add-Content -Path $logFile -Value "$(Get-Date) - Updates triggered with UsoClient."
-        Write-Host "Updates triggered successfully. Log saved to: $logFile" -ForegroundColor $EmphasizedNameColor
+        Write-Host "Updates triggered successfully. Log saved to: $logFile" -ForegroundColor Green
         
-        # Since this is a standalone workstation, reboot automatically
-        Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
+        Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor Red
         shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
-        Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
+        Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor Yellow
     } catch {
-        Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor Red
         Add-Content -Path $logFile -Value "$(Get-Date) - Failed to trigger updates: $($_.Exception.Message)"
     }
 
-    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor Cyan
 }
 
-#gdsvgglololol
+
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
-    # Check if winget is installed
     if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
         Write-Host "Winget not found. Attempting to install via Chocolatey..." -ForegroundColor Yellow
 
-        # Install Chocolatey if not present
         if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
             Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -684,22 +677,19 @@ function Application-Updates {
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
         }
 
-        # Install winget via Chocolatey
         choco install winget -y
         refreshenv
     }
 
-    # Refresh environment in case winget was just installed
-    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
+    # ✅ Fixed
+    $env:Path += ";$($env:LOCALAPPDATA)\Microsoft\WindowsApps"
 
-    # Confirm winget is now available
     if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
         Write-Host "Winget installation failed or still unavailable." -ForegroundColor Red
         return
     }
 
     try {
-        # Fetch list of updatable apps
         $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
         if (-not $updates) {
@@ -709,7 +699,6 @@ function Application-Updates {
             winget upgrade
 
             foreach ($app in $updates) {
-                # Extract app ID (skip headers, match proper entries)
                 if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
                     $id = $matches[1].Trim()
                     $version = $matches[2].Trim()
@@ -732,7 +721,7 @@ function Application-Updates {
             }
         }
 
-        # 🔽 Reinstall Google Chrome after updates are finished
+        # Reinstall Google Chrome
         Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
         try {
             $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
@@ -747,15 +736,14 @@ function Application-Updates {
             Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
             winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
             Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
-        }
-        catch {
+        } catch {
             Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
         }
-
     } catch {
         Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
+
 
 
 function Prohibited-Files {
