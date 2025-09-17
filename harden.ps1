@@ -1,7 +1,7 @@
 # ===== Variables Section Start =====
 $MaxPasswordAge = 60  # Maximum password age in days
 $TempPassword = '1CyberPatriot!' # Temporary password for user accounts
-
+$MinPasswordLength = 20  # Minimum password length
 # Color variables
 $HeaderColor = "Cyan"            # Color for headers
 $PromptColor = "Yellow"          # Color for prompts
