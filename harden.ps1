@@ -544,7 +544,7 @@ function Defensive-Countermeasures {
     }
 
     Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
-}
+
 function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 
@@ -570,7 +570,7 @@ function Uncategorized-OS-Settings {
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
-
+}
 
 function Service-Auditing {
     Write-Host "`n--- Starting: Service Auditing ---`n"
