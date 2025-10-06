@@ -1043,12 +1043,3 @@ do {
  while ($true)
 # End of script 
 #Changed
-#Chnaged again
-#change
-#merge
-#YIPPIE
-#yo
-#yo
-#rur
-#yippie
-#k
