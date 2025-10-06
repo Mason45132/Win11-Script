@@ -367,7 +367,7 @@ do {
 
             # Force password change at next login
             net user $newUsername /logonpasswordchg:yes
-            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
+            Write-Host "User '$newAdminUsername' must change password at next logon." -ForegroundColor $KeptLineColor
 
             # Ask to add to Administrators group
             $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
