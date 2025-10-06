@@ -148,6 +148,8 @@ function Document-System {
 function Enable-Updates {
     Write-Host "`n--- Starting: Enable Updates ---`n" -ForegroundColor $HeaderColor
 
+    $rebootRequired = $false
+
     # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
@@ -158,6 +160,7 @@ function Enable-Updates {
         } catch {
             Write-Host "Failed to install PSWindowsUpdate module: $($_.Exception.Message)" -ForegroundColor $WarningColor
             return
+        }
     }
 
     Import-Module PSWindowsUpdate
@@ -176,7 +179,6 @@ function Enable-Updates {
     } else {
         Write-Host "`nFound $($updates.Count) update(s)." -ForegroundColor $EmphasizedNameColor
 
-        # Loop through each update and ask before installing
         foreach ($update in $updates) {
             Write-Host "`nUpdate: $($update.Title)" -ForegroundColor $PromptColor
             $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
@@ -188,7 +190,7 @@ function Enable-Updates {
 
             try {
                 Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
-                # Prefer using KBArticleID or UpdateID for uniqueness if available
+
                 if ($update.KBArticleIDs -and $update.KBArticleIDs.Count -gt 0) {
                     Install-WindowsUpdate -KBArticleID $update.KBArticleIDs[0] -AcceptAll -IgnoreReboot -ErrorAction Stop
                 } elseif ($update.UpdateID) {
@@ -196,7 +198,14 @@ function Enable-Updates {
                 } else {
                     Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
                 }
+
                 Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
+
+                # Check if reboot is required
+                if ((Get-WURebootStatus).RebootRequired) {
+                    $rebootRequired = $true
+                }
+
             } catch {
                 Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
             }
@@ -229,40 +238,51 @@ function Enable-Updates {
     } else {
         Write-Host "Google Chrome is already installed. Checking for updates..." -ForegroundColor $PromptColor
 
-# Attempt to run Chrome's updater
-$chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
-if (-not (Test-Path $chromeUpdater)) {
-    $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
-}
+        $chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
+        if (-not (Test-Path $chromeUpdater)) {
+            $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
+        }
 
-if (Test-Path $chromeUpdater) {
-    try {
-        Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
-        Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
-    } catch {
-        Write-Host "Failed to run Chrome updater: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        if (Test-Path $chromeUpdater) {
+            try {
+                Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
+                Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
+            } catch {
+                Write-Host "Failed to run Chrome updater: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+        } else {
+            Write-Host "Chrome updater not found. Reinstalling Chrome to restore update functionality..." -ForegroundColor $WarningColor
+
+            $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+            $tempInstaller = "$env:TEMP\chrome_installer.exe"
+
+            try {
+                Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
+                Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
+                Write-Host "Chrome reinstalled successfully. Updater should now be restored." -ForegroundColor $KeptLineColor
+            } catch {
+                Write-Host "Failed to reinstall Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            } finally {
+                if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
+            }
+        }
     }
-} else {
-    Write-Host "Chrome updater not found. Reinstalling Chrome to restore update functionality..." -ForegroundColor $WarningColor
 
-    $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-    $tempInstaller = "$env:TEMP\chrome_installer.exe"
-
-    try {
-        Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
-        Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
-        Write-Host "Chrome reinstalled successfully. Updater should now be restored." -ForegroundColor $KeptLineColor
-    } catch {
-        Write-Host "Failed to reinstall Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-    } finally {
-        if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
-    }
-}
+    # Prompt for reboot if needed
+    if ($rebootRequired) {
+        Write-Host "`nOne or more updates require a system restart." -ForegroundColor $WarningColor
+        $rebootAnswer = Read-Host "Do you want to reboot now? [Y/n] (default Y)"
+        if ($rebootAnswer -eq 'n' -or $rebootAnswer -eq 'N') {
+            Write-Host "System reboot skipped. Please remember to restart manually." -ForegroundColor $PromptColor
+        } else {
+            Write-Host "Rebooting system now..." -ForegroundColor $HeaderColor
+            Restart-Computer -Force
+        }
     }
 
     Write-Host "`n--- Enable Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
-}
+
 function User-Auditing {
     Write-Host "`n--- Starting: User Auditing ---`n" -ForegroundColor $HeaderColor
 
