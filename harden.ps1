@@ -560,9 +560,9 @@ function Uncategorized-OS-Settings {
         # Verify
         $raStatus = (Get-ItemProperty -Path $raKey -Name fAllowToGetHelp).fAllowToGetHelp
         if ($raStatus -eq 0) {
-            Write-Host "✅ Remote Assistance is disabled." -ForegroundColor Green
+            Write-Host " Remote Assistance is disabled." -ForegroundColor Green
         } else {
-            Write-Host "⚠️ Failed to disable Remote Assistance." -ForegroundColor Red
+            Write-Host " Failed to disable Remote Assistance." -ForegroundColor Red
         }
     } catch {
         Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
@@ -761,7 +761,7 @@ function Prohibited-Files {
                             # Always remove clear text password file without asking
                             try {
                                 Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host "🚫 Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
+                                Write-Host " Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
                             } catch {
                                 Write-Warning "Failed to delete $($file.FullName): $_"
                             }
