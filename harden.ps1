@@ -543,7 +543,7 @@ function Enable-DefensiveCountermeasures {
     }
 
     Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
-}
+
 
 function Uncategorized-OS-Settings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
