@@ -513,33 +513,33 @@ function Local-Policies {
 }
 
 function Enable-DefensiveCountermeasures {
-    Write-Host "`n🔧 Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
+    Write-Host "`n Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
 
     # Try to remove Group Policy block (optional)
     try {
         $keyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
         if (Test-Path $keyPath) {
             Remove-Item -Path $keyPath -Recurse -Force
-            Write-Host "✅ Removed Group Policy override." -ForegroundColor Green
+            Write-Host " Removed Group Policy override." -ForegroundColor Green
         }
     } catch {
-        Write-Host "⚠️ Could not remove policy key (may require Tamper Protection OFF)." -ForegroundColor Yellow
+        Write-Host " Could not remove policy key (may require Tamper Protection OFF)." -ForegroundColor Yellow
     }
 
     # Attempt to enable Real-Time Monitoring
     try {
         Set-MpPreference -DisableRealtimeMonitoring $false
-        Write-Host "✅ Real-time monitoring requested." -ForegroundColor Green
+        Write-Host " Real-time monitoring requested." -ForegroundColor Green
     } catch {
-        Write-Host "❌ Failed to enable Real-Time Protection: $_" -ForegroundColor Red
+        Write-Host " Failed to enable Real-Time Protection: $_" -ForegroundColor Red
     }
 
     # Final status check
     $status = Get-MpComputerStatus
     if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
-        Write-Host "🟢 Defender Real-Time Protection is ENABLED." -ForegroundColor Green
+        Write-Host " Defender Real-Time Protection is ENABLED." -ForegroundColor Green
     } else {
-        Write-Host "🔴 Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
+        Write-Host " Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
     }
 
     Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
