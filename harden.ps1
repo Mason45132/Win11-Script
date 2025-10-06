@@ -188,7 +188,14 @@ function Enable-Updates {
 
             try {
                 Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
-                Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+                # Prefer using KBArticleID or UpdateID for uniqueness if available
+                if ($update.KBArticleIDs -and $update.KBArticleIDs.Count -gt 0) {
+                    Install-WindowsUpdate -KBArticleID $update.KBArticleIDs[0] -AcceptAll -IgnoreReboot -ErrorAction Stop
+                } elseif ($update.UpdateID) {
+                    Install-WindowsUpdate -UpdateID $update.UpdateID -AcceptAll -IgnoreReboot -ErrorAction Stop
+                } else {
+                    Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+                }
                 Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
             } catch {
                 Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
