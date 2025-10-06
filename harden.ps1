@@ -158,7 +158,6 @@ function Enable-Updates {
         } catch {
             Write-Host "Failed to install PSWindowsUpdate module: $($_.Exception.Message)" -ForegroundColor $WarningColor
             return
-        }
     }
 
     Import-Module PSWindowsUpdate
@@ -256,7 +255,7 @@ if (Test-Path $chromeUpdater) {
 
     Write-Host "`n--- Enable Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
-
+}
 function User-Auditing {
     Write-Host "`n--- Starting: User Auditing ---`n" -ForegroundColor $HeaderColor
 
@@ -513,7 +512,7 @@ function Local-Policies {
     Write-Host "`n--- Local Policies Completed ---`n"
 }
 
-function Defensive-Countermeasures {
+function Enable-DefensiveCountermeasures {
     Write-Host "`n🔧 Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
 
     # Try to remove Group Policy block (optional)
@@ -997,7 +996,7 @@ do {
             $completedOptions += $menuOptions[4]  # Mark as completed
         }
         "6"  { 
-            Defensive-Countermeasures 
+            Enable-DefensiveCountermeasures 
             $completedOptions += $menuOptions[5]  # Mark as completed
         }
         "7"  { 
