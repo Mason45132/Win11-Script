@@ -893,12 +893,12 @@ function Unwanted-Software {
             Write-Host "No Internet Explorer features found (Windows 11 or already removed)." -ForegroundColor Gray
         }
     } else {
-        Write-Host "Non-Windows 10/11 system detected. Manual removal of IE may be required." -ForegroundColor Gray
+        Write-Host "Non-Windows 10/11 system detected. Manual removal of INTEXP may be required." -ForegroundColor Gray
     }
 
     # --- Optional reboot if feature was removed ---
     if ($requiresReboot) {
-        Write-Host "`nSystem will reboot in 10 seconds to complete IE removal..." -ForegroundColor Red
+        Write-Host "`nSystem will reboot in 10 seconds to complete INTEXP removal..." -ForegroundColor Red
         shutdown.exe /r /t 10 /c "Rebooting to finish removing Internet Explorer"
     } else {
         Write-Host "`nNo reboot required." -ForegroundColor Green
@@ -906,7 +906,6 @@ function Unwanted-Software {
 
     Write-Host "`n--- Unwanted Software Cleanup Completed ---`n" -ForegroundColor Cyan
 }
-
 
 function Malware {
     <#
