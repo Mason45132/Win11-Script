@@ -11,7 +11,7 @@ $RemovedLineColor = "Red"        # Color for removed lines
 $WarningColor = "Red"            # Color for warnings
 # ===== Variables Section End =====
 
-# Check for admin rights and relaunch as admin if needed
+# Check for admin rights and relaunch as admin if needed                       TempPassword = '1CyberPatriot!'
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Script is not running as administrator. Relaunching as admin..." -ForegroundColor $WarningColor
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -389,7 +389,11 @@ do {
         try {
             # Create new local user
             $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName
+            # Apply additional settings after user creation
+            net user $newUsername /passwordchg:yes
+            net user $newUsername /expires:never
+
             Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
 
             # Force password change at next login
@@ -420,7 +424,11 @@ if ($addAdminAnswer -eq 'y' -or $addAdminAnswer -eq 'Y') {
 
     try {
         $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-        New-LocalUser -Name $newAdminUsername -Password $securePassword -FullName $newAdminFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
+        New-LocalUser -Name $newAdminUsername -Password $securePassword -FullName $newAdminFullName
+        # Apply additional settings after admin creation
+        net user $newAdminUsername /passwordchg:yes
+        net user $newAdminUsername /expires:never
+
         Write-Host "Administrator account '$newAdminUsername' created successfully." -ForegroundColor $EmphasizedNameColor
 
         net user $newAdminUsername /logonpasswordchg:yes
