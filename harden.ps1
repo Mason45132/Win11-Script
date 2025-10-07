@@ -834,56 +834,79 @@ function Prohibited-Files {
 
 
 function Unwanted-Software {
-    Write-Host "`n--- Starting: Unwanted Software ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- Starting: Unwanted Software Cleanup ---`n" -ForegroundColor Cyan
 
     # --- Uninstall Angry IP Scanner ---
     $angryIPPath = "C:\Program Files\Angry IP Scanner\uninstall.exe"
     if (Test-Path $angryIPPath) {
-        Write-Host "Uninstalling Angry IP Scanner..." -ForegroundColor $PromptColor
+        Write-Host "Uninstalling Angry IP Scanner..." -ForegroundColor Yellow
         try {
             Start-Process -FilePath $angryIPPath -ArgumentList "/S" -Wait -ErrorAction Stop
-            Write-Host "Angry IP Scanner uninstalled successfully." -ForegroundColor $EmphasizedNameColor
+            Write-Host "Angry IP Scanner uninstalled successfully." -ForegroundColor Green
         } catch {
-            Write-Host "Failed to uninstall Angry IP Scanner: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to uninstall Angry IP Scanner: $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "Angry IP Scanner is not installed." -ForegroundColor $KeptLineColor
+        Write-Host "Angry IP Scanner is not installed." -ForegroundColor Gray
     }
 
     # --- Remove Everything FTP root files ---
     $everythingPath = "C:\inetpub\ftproot\Everything"
     if (Test-Path $everythingPath) {
-        Write-Host "Removing all files from $everythingPath..." -ForegroundColor $PromptColor
+        Write-Host "Removing all files from $everythingPath..." -ForegroundColor Yellow
         try {
             Get-ChildItem -Path $everythingPath -File -Recurse | Remove-Item -Force
-            Write-Host "All files removed from $everythingPath." -ForegroundColor $EmphasizedNameColor
+            Write-Host "All files removed from $everythingPath." -ForegroundColor Green
         } catch {
-            Write-Host "Failed to remove files from $everythingPath : $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to remove files from $everythingPath : $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "Folder $everythingPath does not exist." -ForegroundColor $KeptLineColor
+        Write-Host "Folder $everythingPath does not exist." -ForegroundColor Gray
     }
 
     # --- Remove Internet Explorer ---
-    Write-Host "Checking for Internet Explorer installation..." -ForegroundColor $PromptColor
-    $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
-    if ($ieFeature -and $ieFeature.State -eq "Enabled") {
-        Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor $WarningColor
-        try {
-            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction Stop
-            Write-Host "Internet Explorer has been removed successfully." -ForegroundColor $EmphasizedNameColor
-        } catch {
-            Write-Host "Failed to remove Internet Explorer: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    Write-Host "`nChecking Internet Explorer status..." -ForegroundColor Yellow
+    $osVersion = (Get-CimInstance Win32_OperatingSystem).Version
+    Write-Host "Detected Windows version: $osVersion" -ForegroundColor Gray
+
+    $requiresReboot = $false
+
+    if ($osVersion -match '^10\.0') {
+        # Windows 10 / 11 family
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
+        if ($ieFeature) {
+            foreach ($feature in $ieFeature) {
+                if ($feature.State -eq "Enabled") {
+                    Write-Host "Disabling feature: $($feature.FeatureName)..." -ForegroundColor Yellow
+                    try {
+                        Disable-WindowsOptionalFeature -Online -FeatureName $feature.FeatureName -NoRestart -ErrorAction Stop
+                        Write-Host " $($feature.FeatureName) disabled successfully." -ForegroundColor Green
+                        $requiresReboot = $true
+                    } catch {
+                        Write-Host " Failed to disable $($feature.FeatureName): $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                } else {
+                    Write-Host " $($feature.FeatureName) already disabled." -ForegroundColor Gray
+                }
+            }
+        } else {
+            Write-Host "No Internet Explorer features found (Windows 11 or already removed)." -ForegroundColor Gray
         }
-    } elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
-        Write-Host "Internet Explorer is already disabled." -ForegroundColor $KeptLineColor
     } else {
-        Write-Host "Internet Explorer feature not found on this system." -ForegroundColor $KeptLineColor
+        Write-Host "Non-Windows 10/11 system detected. Manual removal of IE may be required." -ForegroundColor Gray
     }
-            Write-Host "Rebooting system in 10 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 10 /c "Rebooting to finish updates"
-    Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
+
+    # --- Optional reboot if feature was removed ---
+    if ($requiresReboot) {
+        Write-Host "`nSystem will reboot in 10 seconds to complete IE removal..." -ForegroundColor Red
+        shutdown.exe /r /t 10 /c "Rebooting to finish removing Internet Explorer"
+    } else {
+        Write-Host "`nNo reboot required." -ForegroundColor Green
+    }
+
+    Write-Host "`n--- Unwanted Software Cleanup Completed ---`n" -ForegroundColor Cyan
 }
+
 
 function Malware {
     <#
