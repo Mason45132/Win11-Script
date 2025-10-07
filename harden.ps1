@@ -680,7 +680,7 @@ function OS-Updates {
         
         # Since this is a standalone workstation, reboot automatically
         Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
+        shutdown.exe /r /t 10 /c "Rebooting to finish Windows Updates"
         Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
@@ -864,6 +864,24 @@ function Unwanted-Software {
         Write-Host "Folder $everythingPath does not exist." -ForegroundColor $KeptLineColor
     }
 
+    # --- Remove Internet Explorer ---
+    Write-Host "Checking for Internet Explorer installation..." -ForegroundColor $PromptColor
+    $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
+    if ($ieFeature -and $ieFeature.State -eq "Enabled") {
+        Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor $WarningColor
+        try {
+            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction Stop
+            Write-Host "Internet Explorer has been removed successfully." -ForegroundColor $EmphasizedNameColor
+        } catch {
+            Write-Host "Failed to remove Internet Explorer: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    } elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
+        Write-Host "Internet Explorer is already disabled." -ForegroundColor $KeptLineColor
+    } else {
+        Write-Host "Internet Explorer feature not found on this system." -ForegroundColor $KeptLineColor
+    }
+            Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
+        shutdown.exe /r /t 10 /c "Rebooting to finish updates"
     Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
 }
 
