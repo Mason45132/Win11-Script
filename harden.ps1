@@ -880,7 +880,7 @@ function Unwanted-Software {
     } else {
         Write-Host "Internet Explorer feature not found on this system." -ForegroundColor $KeptLineColor
     }
-            Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
+            Write-Host "Rebooting system in 10 seconds to complete updates..." -ForegroundColor $WarningColor
         shutdown.exe /r /t 10 /c "Rebooting to finish updates"
     Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
 }
