@@ -516,16 +516,21 @@ function Local-Policies {
                 Write-Host "2. Disable (do not require it)"
                 $ctrlChoice = Read-Host "Enter your choice"
 
-                $regPath = "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System"
+                $regPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System"
                 $regName = "DisableCAD"
+
+                # Ensure the registry key exists
+                if (-not (Test-Path $regPath)) {
+                    New-Item -Path $regPath -Force | Out-Null
+                }
 
                 switch ($ctrlChoice) {
                     '1' {
-                        Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Force
+                        Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Type DWord -Force
                         Write-Host "CTRL+ALT+DEL is now required at login." -ForegroundColor Green
                     }
                     '2' {
-                        Set-ItemProperty -Path $regPath -Name $regName -Value 1 -Force
+                        Set-ItemProperty -Path $regPath -Name $regName -Value 1 -Type DWord -Force
                         Write-Host "CTRL+ALT+DEL is no longer required at login." -ForegroundColor Yellow
                     }
                     default {
