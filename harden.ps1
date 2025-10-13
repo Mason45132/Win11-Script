@@ -166,6 +166,7 @@ function Enable-Updates {
     Import-Module PSWindowsUpdate
 
     # Search for available updates
+    # ERROR: try  --Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned--
     Write-Host "Searching for available updates..." -ForegroundColor $PromptColor
     try {
         $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -IgnoreReboot -ErrorAction Stop
