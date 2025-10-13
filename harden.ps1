@@ -154,7 +154,10 @@ function Enable-Updates {
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
-            Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            }
             Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
             Write-Host "'PSWindowsUpdate' module installed successfully." -ForegroundColor $EmphasizedNameColor
         } catch {
@@ -569,15 +572,23 @@ function Enable-DefensiveCountermeasures {
 
     # Attempt to enable Real-Time Monitoring
     try {
-        Set-MpPreference -DisableRealtimeMonitoring $false
-        Write-Host " Real-time monitoring requested." -ForegroundColor Green
+        if (Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue) {
+            Set-MpPreference -DisableRealtimeMonitoring $false
+            Write-Host " Real-time monitoring requested." -ForegroundColor Green
+        } else {
+            Write-Host " Windows Defender service is not running. Please ensure it is installed and started." -ForegroundColor Yellow
+        }
     } catch {
-        Write-Host " Failed to enable Real-Time Protection: $_" -ForegroundColor Red
+    if (Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue) {
+        $status = Get-MpComputerStatus
+        if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
+            Write-Host " Defender Real-Time Protection is ENABLED." -ForegroundColor Green
+        } else {
+            Write-Host " Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
+        }
+    } else {
+        Write-Host " Windows Defender service is not running. Please ensure it is installed and started." -ForegroundColor Yellow
     }
-
-    # Final status check
-    $status = Get-MpComputerStatus
-    if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
         Write-Host " Defender Real-Time Protection is ENABLED." -ForegroundColor Green
     } else {
         Write-Host " Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
@@ -923,19 +934,42 @@ function Malware {
         Write-Host "Ensuring real-time protection is enabled..." -ForegroundColor Yellow
         Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
+        # Ensure Windows Defender service is running
+        Write-Host "Ensuring Windows Defender service is running..." -ForegroundColor Yellow
+        $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue
+        if ($defenderService -and $defenderService.Status -ne "Running") {
+            try {
+                Start-Service -Name "WinDefend" -ErrorAction Stop
+                Write-Host "Windows Defender service started successfully." -ForegroundColor Green
+            } catch {
+                Write-Host "Failed to start Windows Defender service: $($_.Exception.Message)" -ForegroundColor Red
+                return
+            }
+        }
+
         # Run quick system scan
         Write-Host "Running quick system scan. This may take some time..." -ForegroundColor Yellow
-        Start-MpScan -ScanType QuickScan 
+        try {
+            Start-MpScan -ScanType QuickScan
+        } catch {
+            Write-Host "Failed to start malware scan: $($_.Exception.Message)" -ForegroundColor Red
+            return
+        }
 
         # Get detected threats
         $threats = Get-MpThreatDetection
 
-        if ($threats) {
+        if ($threats -and $threats.Count -gt 0) {
             Write-Host "Detected threats found. Removing..." -ForegroundColor Red
             $threats | ForEach-Object {
-                Remove-MpThreat -ThreatID $_.ThreatID -ErrorAction SilentlyContinue
+                try {
+                    Remove-MpThreat -ThreatID $_.ThreatID -ErrorAction Stop
+                    Write-Host "Removed threat: $($_.ThreatName)" -ForegroundColor Green
+                } catch {
+                    Write-Host "Failed to remove threat: $($_.ThreatName) - $($_.Exception.Message)" -ForegroundColor Yellow
+                }
             }
-            Write-Host "All detected threats have been removed." -ForegroundColor Green
+            Write-Host "All detected threats have been processed." -ForegroundColor Green
         } else {
             Write-Host "No malware detected." -ForegroundColor Green
         }
@@ -946,12 +980,6 @@ function Malware {
         Write-Host "Error during malware scan: $_" -ForegroundColor Red
     }
 }
-
-# Usage:
-# To run the malware scan, simply type:
-# Malware
-
-#local policie
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
 
