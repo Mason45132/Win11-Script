@@ -150,11 +150,13 @@ function Enable-Updates {
 
     $rebootRequired = $false
 
+    # Ensure TLS 1.2 is enabled for secure downloads (only once per session)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
     # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
                 Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
             }
@@ -692,7 +694,7 @@ function OS-Updates {
         
         # Since this is a standalone workstation, reboot automatically
         Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 10 /c "Rebooting to finish Windows Updates"
+        shutdown.exe /r /t 30 /c "Rebooting to finish Windows Updates"
         Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
@@ -702,73 +704,148 @@ function OS-Updates {
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-#gdsvgglololol
+#gdsvgglololol10
 function Application-Updates {
     Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
-    # Check if winget is installed
-    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget not found. Attempting to install via Chocolatey..." -ForegroundColor Yellow
-
-        # Install Chocolatey if not present
-        if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-        }
-
-        # Install winget via Chocolatey
-        choco install winget -y
-        refreshenv
+    # Helper: Install Chocolatey
+    function Install-Chocolatey {
+        Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     }
 
-    # Refresh environment in case winget was just installed
+    # Helper: Install Scoop
+    function Install-Scoop {
+        Write-Host "Installing Scoop..." -ForegroundColor Cyan
+        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
+    }
+
+    # Try to ensure winget installed
+    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+        Write-Host "Winget not found. Checking OS version compatibility..." -ForegroundColor Yellow
+
+        $osVersion = [System.Environment]::OSVersion.Version
+        if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 16299)) {
+            Write-Host "Winget is not supported on this OS version. Skipping winget installation." -ForegroundColor Red
+        } else {
+            if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
+                Install-Chocolatey
+            }
+
+            Write-Host "Attempting to install winget via Chocolatey..." -ForegroundColor Yellow
+            try {
+                choco install winget -y
+                refreshenv
+            } catch {
+                Write-Warning "Chocolatey installation of winget failed: $_"
+            }
+
+            if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+                if (-not (Get-Command "scoop" -ErrorAction SilentlyContinue)) {
+                    Install-Scoop
+                }
+
+                Write-Host "Attempting to install winget via Scoop..." -ForegroundColor Yellow
+                try {
+                    scoop install winget
+                } catch {
+                    Write-Warning "Scoop installation of winget failed: $_"
+                }
+
+                if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+                    Write-Host "Winget installation failed or unavailable." -ForegroundColor Red
+                }
+            }
+        }
+    }
+
+    # Refresh PATH to include winget location
     $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
 
-    # Confirm winget is now available
-    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget installation failed or still unavailable." -ForegroundColor Red
-        return
-    }
+    $updated = $false
 
-    try {
-        # Fetch list of updatable apps
-        $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
+    # Try Winget updates first
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            Write-Host "Attempting to update apps with Winget..." -ForegroundColor Cyan
+            $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
 
-        if (-not $updates) {
-            Write-Host "No application updates available." -ForegroundColor Green
-        } else {
-            Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
-            winget upgrade
+            if (-not $updates) {
+                Write-Host "No application updates available via Winget." -ForegroundColor Green
+                $updated = $true
+            } else {
+                Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
+                winget upgrade
 
-            foreach ($app in $updates) {
-                # Extract app ID (skip headers, match proper entries)
-                if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
-                    $id = $matches[1].Trim()
-                    $version = $matches[2].Trim()
-                    $available = $matches[3].Trim()
+                foreach ($app in $updates) {
+                    if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+                        $id = $matches[1].Trim()
+                        $version = $matches[2].Trim()
+                        $available = $matches[3].Trim()
 
-                    Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
-                    $choice = Read-Host "Do you want to update $id? [Y/n]"
+                        Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
+                        $choice = Read-Host "Do you want to update $id? [Y/n]"
 
-                    if ($choice -eq 'n' -or $choice -eq 'N') {
-                        Write-Host "Skipped: $id" -ForegroundColor DarkYellow
-                    } else {
-                        try {
-                            winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
-                            Write-Host "Updated: $id" -ForegroundColor Green
-                        } catch {
-                            Write-Host "Failed to update $id : $_" -ForegroundColor Red
+                        if ($choice -eq 'n' -or $choice -eq 'N') {
+                            Write-Host "Skipped: $id" -ForegroundColor DarkYellow
+                        } else {
+                            try {
+                                winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                                Write-Host "Updated: $id" -ForegroundColor Green
+                                $updated = $true
+                            } catch {
+                                Write-Host "Failed to update $id : $_" -ForegroundColor Red
+                            }
                         }
                     }
                 }
             }
+        } catch {
+            Write-Warning "Winget update process failed: $_"
         }
+    }
 
-        # 🔽 Reinstall Google Chrome after updates are finished
-        Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
-        try {
+    # Fallback to Chocolatey if no updates applied
+    if (-not $updated) {
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            try {
+                Write-Host "Attempting to update apps with Chocolatey..." -ForegroundColor Cyan
+                choco upgrade all -y
+                $updated = $true
+            } catch {
+                Write-Warning "Chocolatey update process failed: $_"
+            }
+        } else {
+            Write-Host "Chocolatey is not installed or unavailable." -ForegroundColor Yellow
+        }
+    }
+
+    # Fallback to Scoop if still no updates
+    if (-not $updated) {
+        if (Get-Command scoop -ErrorAction SilentlyContinue) {
+            try {
+                Write-Host "Attempting to update apps with Scoop..." -ForegroundColor Cyan
+                scoop update *
+                $updated = $true
+            } catch {
+                Write-Warning "Scoop update process failed: $_"
+            }
+        } else {
+            Write-Host "Scoop is not installed or unavailable." -ForegroundColor Yellow
+        }
+    }
+
+    if (-not $updated) {
+        Write-Warning "No updates performed. Please update applications manually."
+    }
+
+    # Reinstall Google Chrome regardless, as per your original script
+    Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
+    try {
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
             $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
             if ($chrome) {
                 Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
@@ -781,17 +858,12 @@ function Application-Updates {
             Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
             winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
             Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
-        }
-        catch {
-            Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
-        }
-
-    } catch {
-        Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
+    }
+    catch {
+        Write-Warning "Error reinstalling Google Chrome: $_"
     }
 }
-
-
+}
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
@@ -843,7 +915,6 @@ function Prohibited-Files {
 
     Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
 }
-
 
 function Unwanted-Software {
     Write-Host "`n--- Starting: Unwanted Software Cleanup ---`n" -ForegroundColor Cyan
@@ -949,10 +1020,12 @@ function Malware {
 
         # Run quick system scan
         Write-Host "Running quick system scan. This may take some time..." -ForegroundColor Yellow
+        # Enhanced error handling for Start-MpScan
         try {
             Start-MpScan -ScanType QuickScan
         } catch {
-            Write-Host "Failed to start malware scan: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Failed to start malware scan. Please ensure Windows Defender is enabled and no other antivirus software is interfering." -ForegroundColor Red
+            Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Yellow
             return
         }
 
@@ -991,7 +1064,7 @@ function Application-Security-Settings {
             @{ Id = "3B576869-A4EC-4529-8536-B80A7769E899"; Path = "$env:TEMP\*"; }
         )
         foreach ($rule in $rules) {
-            Add-MpPreference -AttackSurfaceReductionOnlyExclusions $rule.Path -ErrorAction SilentlyContinue
+            Write-Host "Attack Surface Reduction rules must be configured manually for path exclusions: $($rule.Path)" -ForegroundColor Yellow
         }
 
         # Enable SmartScreen for Microsoft Store apps
@@ -1000,7 +1073,12 @@ function Application-Security-Settings {
 
         # Enable SmartScreen for Edge
         Write-Host "Enabling SmartScreen for Microsoft Edge..." -ForegroundColor Yellow
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Edge\SmartScreenEnabled" -Name "Enabled" -Value 1 -Force
+        # Ensure the registry path exists before setting the property
+        $edgeSmartScreenPath = "HKCU:\Software\Microsoft\Edge"
+        if (-not (Test-Path $edgeSmartScreenPath)) {
+            New-Item -Path $edgeSmartScreenPath -Force | Out-Null
+        }
+        Set-ItemProperty -Path "$edgeSmartScreenPath" -Name "SmartScreenEnabled" -Value 1 -Force
 
         # Enable SmartScreen for Windows
         Write-Host "Enabling SmartScreen for Windows..." -ForegroundColor Yellow
@@ -1150,5 +1228,3 @@ do {
     }
 }
  while ($true)
-# End of script 
-#Changed
