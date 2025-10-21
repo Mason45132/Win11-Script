@@ -155,6 +155,7 @@ function Enable-Updates {
 
     # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+    
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
             if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
@@ -471,6 +472,56 @@ function Account-Policies {
         return
     }
 
+    # Set the minimum password age
+    Write-Host "Setting minimum password age to $MinPasswordAge day..." -ForegroundColor Yellow
+    try {
+        net accounts /MINPWAGE:$MinPasswordAge | Out-Null
+        Write-Host "Successfully set Minimum Password Age to $MinPasswordAge day." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Minimum Password Age: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Enforce password complexity
+    Write-Host "Enforcing password complexity requirements..." -ForegroundColor Yellow
+    try {
+        secedit /configure /db secedit.sdb /cfg %windir%\inf\basicwk.inf /areas SECURITYPOLICY | Out-Null
+        Write-Host "Password complexity enforced successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to enforce password complexity: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Configure reversible encryption
+    Write-Host "Disabling reversible encryption for passwords..." -ForegroundColor Yellow
+    try {
+        reg add "HKLM\System\CurrentControlSet\Control\Lsa" /v "StoreClearText" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Host "Reversible encryption disabled successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to disable reversible encryption: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Set account lockout threshold
+    Write-Host "Setting account lockout threshold to 5 attempts..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTTHRESHOLD:5 | Out-Null
+        Write-Host "Successfully set Account Lockout Threshold to 5 attempts." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Threshold: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Set lockout observation window
+    Write-Host "Setting account lockout observation window to 30 minutes..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTWINDOW:30 | Out-Null
+        Write-Host "Successfully set Account Lockout Observation Window to 30 minutes." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Observation Window: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
     Write-Host "`n--- Finished: Setting Account Policies ---`n" -ForegroundColor Cyan
 }
 
@@ -691,11 +742,28 @@ function OS-Updates {
         UsoClient StartInstall
         Add-Content -Path $logFile -Value "$(Get-Date) - Updates triggered with UsoClient."
         Write-Host "Updates triggered successfully. Log saved to: $logFile" -ForegroundColor $EmphasizedNameColor
-        
-        # Since this is a standalone workstation, reboot automatically
-        Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 30 /c "Rebooting to finish Windows Updates"
-        Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
+
+        # Wait for updates to complete installation
+        Write-Host "Waiting for updates to complete installation..." -ForegroundColor Yellow
+        $updatesInProgress = $true
+        while ($updatesInProgress) {
+            Start-Sleep -Seconds 30
+            $updateStatus = UsoClient ScanInstallWait
+            if ($updateStatus -notmatch "Updates in progress") {
+                $updatesInProgress = $false
+            }
+        }
+        Write-Host "Updates installed successfully." -ForegroundColor Green
+
+        # Prompt for reboot
+        $rebootAnswer = Read-Host "Updates completed. Do you want to reboot now? [Y/n] (default Y)"
+        if ($rebootAnswer -eq 'n' -or $rebootAnswer -eq 'N') {
+            Write-Host "System reboot skipped. Please remember to restart manually." -ForegroundColor $PromptColor
+        } else {
+            Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
+            shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
+            Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
+        }
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
         Add-Content -Path $logFile -Value "$(Get-Date) - Failed to trigger updates: $($_.Exception.Message)"
