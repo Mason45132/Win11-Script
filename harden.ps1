@@ -1,8 +1,12 @@
 # ===== Variables Section Start =====
 $MaxPasswordAge = 60  # Maximum password age in days
+$MinPasswordAge = 1   # Minimum password age in days
 $TempPassword = '1CyberPatriot!' # Temporary password for user accounts
 $MinPasswordLength = 20  # Minimum password length
-# Color variables
+$LockoutThreshold = 5  # Account lockout threshold
+$LockoutDuration = 30  # Account lockout duration in minutes
+$LockoutWindow = 30    # Account lockout observation window in minutes
+# Color variables ====
 $HeaderColor = "Cyan"            # Color for headers
 $PromptColor = "Yellow"          # Color for prompts
 $EmphasizedNameColor = "Green"   # Color for emphasized names
@@ -482,17 +486,33 @@ function Account-Policies {
         return
     }
 
+    # Set password history
+    Write-Host "Enforcing password history to remember last 24 passwords..." -ForegroundColor Yellow
+    try {
+        secedit /export /cfg temp.inf
+        (Get-Content temp.inf).replace("PasswordHistorySize = 0", "PasswordHistorySize = 24") | Set-Content temp_modified.inf
+        secedit /configure /db secedit.sdb /cfg temp_modified.inf /areas SECURITYPOLICY | Out-Null
+        Remove-Item temp.inf, temp_modified.inf -Force
+        Write-Host "Password history policy set successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set password history: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
     # Enforce password complexity
     Write-Host "Enforcing password complexity requirements..." -ForegroundColor Yellow
     try {
-        secedit /configure /db secedit.sdb /cfg %windir%\inf\basicwk.inf /areas SECURITYPOLICY | Out-Null
+        secedit /export /cfg temp.inf
+        (Get-Content temp.inf).replace("PasswordComplexity = 0", "PasswordComplexity = 1") | Set-Content temp_modified.inf
+        secedit /configure /db secedit.sdb /cfg temp_modified.inf /areas SECURITYPOLICY | Out-Null
+        Remove-Item temp.inf, temp_modified.inf -Force
         Write-Host "Password complexity enforced successfully." -ForegroundColor Green
     } catch {
         Write-Host "Failed to enforce password complexity: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    # Configure reversible encryption
+    # Disable reversible encryption
     Write-Host "Disabling reversible encryption for passwords..." -ForegroundColor Yellow
     try {
         reg add "HKLM\System\CurrentControlSet\Control\Lsa" /v "StoreClearText" /t REG_DWORD /d 0 /f | Out-Null
@@ -505,26 +525,35 @@ function Account-Policies {
     # Set account lockout threshold
     Write-Host "Setting account lockout threshold to 5 attempts..." -ForegroundColor Yellow
     try {
-        net accounts /LOCKOUTTHRESHOLD:5 | Out-Null
-        Write-Host "Successfully set Account Lockout Threshold to 5 attempts." -ForegroundColor Green
+        net accounts /LOCKOUTTHRESHOLD:$LockoutThreshold | Out-Null
+        Write-Host "Successfully set Account Lockout Threshold to $LockoutThreshold attempts." -ForegroundColor Green
     } catch {
         Write-Host "Failed to set Account Lockout Threshold: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
     # Set lockout observation window
-    Write-Host "Setting account lockout observation window to 30 minutes..." -ForegroundColor Yellow
+    Write-Host "Setting account lockout observation window to $LockoutWindow minutes..." -ForegroundColor Yellow
     try {
-        net accounts /LOCKOUTWINDOW:30 | Out-Null
-        Write-Host "Successfully set Account Lockout Observation Window to 30 minutes." -ForegroundColor Green
+        net accounts /LOCKOUTWINDOW:$LockoutWindow | Out-Null
+        Write-Host "Successfully set Account Lockout Observation Window to $LockoutWindow minutes." -ForegroundColor Green
     } catch {
         Write-Host "Failed to set Account Lockout Observation Window: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
+    # Set account lockout duration
+    Write-Host "Setting account lockout duration to $LockoutDuration minutes..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTDURATION:$LockoutDuration | Out-Null
+        Write-Host "Successfully set Account Lockout Duration to $LockoutDuration minutes." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Duration: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
     Write-Host "`n--- Finished: Setting Account Policies ---`n" -ForegroundColor Cyan
 }
-
 
 function Local-Policies {
     Write-Host "`n--- Local Policies ---`n"
