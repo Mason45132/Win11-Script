@@ -507,6 +507,49 @@ function AuditUsers {
     } else {
         Write-Host "No groups deleted." -ForegroundColor $KeptLineColor
     }
+
+    foreach ($user in $localUsers) {
+    # Skip built-in accounts
+    if ($user.Name -in @('Administrator', 'DefaultAccount', 'Guest', 'WDAGUtilityAccount')) {
+        continue
+    }
+
+    Write-Host -NoNewline "Is " -ForegroundColor $EmphasizedNameColor
+    Write-Host -NoNewline "$($user.Name)" -ForegroundColor $PromptColor
+    Write-Host -NoNewline " an Authorized User? [Y/n] (default Y) " -ForegroundColor $EmphasizedNameColor
+
+    $answer = Read-Host
+    try {
+        # Reset password to temporary one
+        Set-LocalUser -Name $user.Name -Password (ConvertTo-SecureString $TempPassword -AsPlainText -Force)
+        Write-Host "Password for '$($user.Name)' reset to temporary value." -ForegroundColor $EmphasizedNameColor
+
+        # Require password change at next logon
+        net user $user.Name /logonpasswordchg:yes
+        Write-Host "User '$($user.Name)' must change password at next logon." -ForegroundColor $EmphasizedNameColor
+    } catch {
+        Write-Host "Failed to reset password for '$($user.Name)': $_" -ForegroundColor $WarningColor
+    }
+
+    if ($answer -eq 'n' -or $answer -eq 'N') {
+        try {
+            Remove-LocalUser -Name $user.Name
+            Write-Host "Deleted user: $($user.Name)" -ForegroundColor $RemovedLineColor
+        } catch {
+            Write-Host "Failed to delete user: $($user.Name) - $_" -ForegroundColor $WarningColor
+        }
+    } else {
+        try {
+            #Enable and unlock authorized users
+            Enable-LocalUser -Name $user.Name
+            Unlock-LocalUser -Name $user.Name
+            Write-Host "Enabled and unlocked user: $($user.Name)" -ForegroundColor $KeptLineColor
+        } catch {
+            Write-Host "Kept user: $($user.Name) (could not enable/unlock or already active)" -ForegroundColor $KeptLineColor
+        }
+    }
+}
+
     Write-Host "`nUser auditing process completed." -ForegroundColor $HeaderColor
 }
 
@@ -998,64 +1041,61 @@ Write-Host "`n--- Application Update Process Completed ---`n" -ForegroundColor C
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", ".txt")
+        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "*.txt", "*.mp3", "*password*", "*cracker*")
     )
 
-    Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
- # Define prohibited file patterns
-    $prohibitedPatterns = @("*.mp3", "*password*", "*cracker*")
+    Write-Host "`n=== Starting scan for prohibited files ===`n" -ForegroundColor Cyan
 
-    # Define directories to scan
-    $directoriesToScan = @("C:\Users", "C:\")
+    # Directories to skip for safety
+    $systemDirs = @(
+        "C:\Windows",
+        "C:\Program Files",
+        "C:\Program Files (x86)",
+        "C:\ProgramData",
+        "C:\Recovery",
+        "C:\$Recycle.Bin",
+        "C:\System Volume Information"
+    )
 
-    foreach ($directory in $directoriesToScan) {
-        foreach ($pattern in $prohibitedPatterns) {
-            try {
-                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
-                foreach ($file in $files) {
-                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                    Write-Host "Removed prohibited file: $($file.FullName)" -ForegroundColor Green
-                }
-            } catch {
-                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
-            }
-        }
-    }
-    
     foreach ($path in $PathsToCheck) {
-        foreach ($pattern in $ProhibitedPatterns) {
-            try {
-                $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue
-                if ($foundFiles) {
-                    Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
-                    foreach ($file in $foundFiles) {
-                        Write-Host $file.FullName -ForegroundColor Yellow
+        Write-Host "`nScanning directory: $path" -ForegroundColor Magenta
 
-                        if ($file.Name -ieq "users.txt") {
-                            # Always remove clear text password file without asking
+        foreach ($pattern in $ProhibitedPatterns) {
+            Write-Host " → Looking for pattern '$pattern'..." -ForegroundColor Cyan
+            try {
+                $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue |
+                              Where-Object { 
+                                  # Skip protected/system directories
+                                  $skip = $false
+                                  foreach ($sysDir in $systemDirs) {
+                                      if ($_.FullName -like "$sysDir*") { $skip = $true; break }
+                                  }
+                                  return -not $skip
+                              }
+
+                if ($foundFiles) {
+                    foreach ($file in $foundFiles) {
+                        Write-Host "Found prohibited file: $($file.FullName)" -ForegroundColor Yellow
+
+                        try {
+                            # Try direct removal first
+                            Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                            Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
+                        } catch {
+                            # Attempt to take ownership only if in non-system area
+                            Write-Host "Access denied. Trying to take ownership of: $($file.FullName)" -ForegroundColor DarkYellow
                             try {
+                                takeown /F "$($file.FullName)" /A /R /D Y | Out-Null
+                                icacls "$($file.FullName)" /grant Administrators:F /T /C | Out-Null
                                 Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host " Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
+                                Write-Host "Deleted (after taking ownership): $($file.FullName)" -ForegroundColor Green
                             } catch {
                                 Write-Warning "Failed to delete $($file.FullName): $_"
-                            }
-                        } else {
-                            # Ask for confirmation before removing other prohibited files
-                            $response = Read-Host "Do you want to delete this file? (Y/N)"
-                            if ($response -match '^[Yy]$') {
-                                try {
-                                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                    Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
-                                } catch {
-                                    Write-Warning "Failed to delete $($file.FullName): $_"
-                                }
-                            } else {
-                                Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
                             }
                         }
                     }
                 } else {
-                    Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor Green
+                    Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor DarkGreen
                 }
             } catch {
                 Write-Warning "Error scanning $path for pattern $pattern : $_"
@@ -1063,8 +1103,9 @@ function Prohibited-Files {
         }
     }
 
-    Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
+    Write-Host "`n=== Prohibited files scan completed ===`n" -ForegroundColor Cyan
 }
+
 
 function Unwanted-Software {
     Write-Host "`n--- Starting: Unwanted Software Cleanup ---`n" -ForegroundColor Cyan
