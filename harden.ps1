@@ -1,8 +1,8 @@
 # ===== Variables Section Start =====
 $MaxPasswordAge = 60  # Maximum password age in days
 $MinPasswordAge = 10   # Minimum password age in days
-$TempPassword = '1CyberPatriot!' # Temporary password for user accounts
-$MinPasswordLength = 20  # Minimum password length
+$TempPassword = '1P@ssword!' # Temporary password for user accounts
+$MinPasswordLength = 10  # Minimum password length
 $LockoutThreshold = 5  # Account lockout threshold
 $LockoutDuration = 30  # Account lockout duration in minutes
 $LockoutWindow = 30    # Account lockout observation window in minutes
@@ -16,7 +16,7 @@ $RemovedLineColor = "Red"        # Color for removed lines
 $WarningColor = "Red"            # Color for warnings
 # ===== Variables Section End =====
 
-# Check for admin rights and relaunch as admin if needed                       TempPassword = '1CyberPatriot!'
+# Check for admin rights and relaunch as admin if needed                       TempPassword = '?1CyberPatriot!?'
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Script is not running as administrator. Relaunching as admin..." -ForegroundColor $WarningColor
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -655,6 +655,8 @@ function Local-Policies {
     reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v "PromptOnSecureDesktop" /t REG_DWORD /d 1 /f
     Write-Host "Secure desktop for elevation prompts enabled." -ForegroundColor Green
 
+    Write-Host "`n--- Start Device Policy ---" -ForegroundColor Cyan
+    Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers" -Name "AddPrinterDrivers" -Value 1
     Write-Host "`n--- Local Policies Applied ---`n" -ForegroundColor Cyan
 }
 
@@ -715,6 +717,23 @@ function UncategorizedOSSettings {
     } catch {
         Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
     }
+
+Write-Host "Disabling AutoRun for all users..." -ForegroundColor Yellow
+
+# Registry path
+$regPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+
+# Create the registry key if it doesn't exist
+If (!(Test-Path $regPath)) {
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+Set-ItemProperty -Path $regPath -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord
+
+# Optional: Also disable AutoPlay (optional, but often combined)
+Set-ItemProperty -Path $regPath -Name "NoAutoRun" -Value 1 -Type DWord
+
+Write-Host "AutoRun has been disabled for all users." -ForegroundColor Green
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
@@ -812,177 +831,197 @@ function OS-Updates {
         Add-Content -Path $logFile -Value "$(Get-Date) - Failed to trigger updates: $($_.Exception.Message)"
     }
 
+   Write-Host "`n--- Enabling Updates for Other Microsoft Products ---`n" -ForegroundColor Cyan
+
+    try {
+        # Enable Microsoft Update
+        reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "AllowMUUpdateService" /t REG_DWORD /d 1 /f
+        Write-Host "Updates for other Microsoft products have been enabled." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to enable updates for other Microsoft products: $_" -ForegroundColor Red
+    }
+
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-#gdsvgglololol10
 function Application-Updates {
-    Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
+Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
-    # Helper: Install Chocolatey
-    function Install-Chocolatey {
-        Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-    }
 
-    # Helper: Install Scoop
-    function Install-Scoop {
-        Write-Host "Installing Scoop..." -ForegroundColor Cyan
-        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
-    }
+# Ensure Winget Installed or Available
+if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host "Winget not found. Attempting installation..." -ForegroundColor Yellow
 
-    # Try to ensure winget installed
-    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget not found. Checking OS version compatibility..." -ForegroundColor Yellow
-
-        $osVersion = [System.Environment]::OSVersion.Version
-        if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 16299)) {
-            Write-Host "Winget is not supported on this OS version. Skipping winget installation." -ForegroundColor Red
-        } else {
-            if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
-                Install-Chocolatey
-            }
-
-            Write-Host "Attempting to install winget via Chocolatey..." -ForegroundColor Yellow
-            try {
-                choco install winget -y
-                refreshenv
-            } catch {
-                Write-Warning "Chocolatey installation of winget failed: $_"
-            }
-
-            if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-                if (-not (Get-Command "scoop" -ErrorAction SilentlyContinue)) {
-                    Install-Scoop
-                }
-
-                Write-Host "Attempting to install winget via Scoop..." -ForegroundColor Yellow
-                try {
-                    scoop install winget
-                } catch {
-                    Write-Warning "Scoop installation of winget failed: $_"
-                }
-
-                if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-                    Write-Host "Winget installation failed or unavailable." -ForegroundColor Red
-                }
-            }
+    $osVersion = [System.Environment]::OSVersion.Version
+    if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 16299)) {
+        Write-Host "Winget not supported on this OS version. Skipping installation." -ForegroundColor Red
+    } else {
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
         }
-    }
 
-    # Refresh PATH to include winget location
-    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
-
-    $updated = $false
-
-    # Try Winget updates first
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
         try {
-            Write-Host "Attempting to update apps with Winget..." -ForegroundColor Cyan
-            $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
-
-            if (-not $updates) {
-                Write-Host "No application updates available via Winget." -ForegroundColor Green
-                $updated = $true
-            } else {
-                Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
-                winget upgrade
-
-                foreach ($app in $updates) {
-                    if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
-                        $id = $matches[1].Trim()
-                        $version = $matches[2].Trim()
-                        $available = $matches[3].Trim()
-
-                        Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
-                        $choice = Read-Host "Do you want to update $id? [Y/n]"
-
-                        if ($choice -eq 'n' -or $choice -eq 'N') {
-                            Write-Host "Skipped: $id" -ForegroundColor DarkYellow
-                        } else {
-                            try {
-                                winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
-                                Write-Host "Updated: $id" -ForegroundColor Green
-                                $updated = $true
-                            } catch {
-                                Write-Host "Failed to update $id : $_" -ForegroundColor Red
-                            }
-                        }
-                    }
-                }
-            }
+            choco install winget -y
+            refreshenv
         } catch {
-            Write-Warning "Winget update process failed: $_"
+            Write-Warning "Chocolatey installation of winget failed: $_"
         }
-    }
 
-    # Fallback to Chocolatey if no updates applied
-    if (-not $updated) {
-        if (Get-Command choco -ErrorAction SilentlyContinue) {
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+                Write-Host "Installing Scoop..." -ForegroundColor Cyan
+                Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+                iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
+            }
+
             try {
-                Write-Host "Attempting to update apps with Chocolatey..." -ForegroundColor Cyan
-                choco upgrade all -y
-                $updated = $true
+                scoop install winget
             } catch {
-                Write-Warning "Chocolatey update process failed: $_"
+                Write-Warning "Scoop installation of winget failed: $_"
             }
-        } else {
-            Write-Host "Chocolatey is not installed or unavailable." -ForegroundColor Yellow
         }
-    }
-
-    # Fallback to Scoop if still no updates
-    if (-not $updated) {
-        if (Get-Command scoop -ErrorAction SilentlyContinue) {
-            try {
-                Write-Host "Attempting to update apps with Scoop..." -ForegroundColor Cyan
-                scoop update *
-                $updated = $true
-            } catch {
-                Write-Warning "Scoop update process failed: $_"
-            }
-        } else {
-            Write-Host "Scoop is not installed or unavailable." -ForegroundColor Yellow
-        }
-    }
-
-    if (-not $updated) {
-        Write-Warning "No updates performed. Please update applications manually."
-    }
-
-    # Reinstall Google Chrome regardless, as per your original script
-    Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
-    try {
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
-            if ($chrome) {
-                Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
-                winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
-                Start-Sleep -Seconds 5
-            } else {
-                Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
-            }
-
-            Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
-            winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
-            Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
-    }
-    catch {
-        Write-Warning "Error reinstalling Google Chrome: $_"
     }
 }
+
+# Refresh PATH just in case
+$env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
+
+Write-Host "`n--- Detecting Installed Applications ---`n" -ForegroundColor Cyan
+
+# Attempt to detect installed apps
+$installedApps = @()
+try {
+    $installedApps = winget list | Where-Object { $_ -and $_ -notmatch "No installed package" }
+} catch {
+    Write-Warning "Unable to retrieve installed apps via winget."
+}
+
+if (-not $installedApps) {
+    Write-Host "No applications detected with Winget. Trying Chocolatey..." -ForegroundColor Yellow
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        $installedApps = choco list --localonly
+    } elseif (Get-Command scoop -ErrorAction SilentlyContinue) {
+        $installedApps = scoop list
+    }
+}
+
+if (-not $installedApps) {
+    Write-Warning "No installed applications could be detected."
+    return
+}
+
+# Common browsers to check
+$browsers = @("Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera", "Vivaldi")
+
+Write-Host "`n--- Checking for Application Updates ---`n" -ForegroundColor Cyan
+
+# Winget first
+$updatesAvailable = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" }
+
+if (-not $updatesAvailable) {
+    Write-Host "No application updates available via Winget." -ForegroundColor Green
+} else {
+    $updatesAvailable | ForEach-Object {
+        if ($_ -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+            $appName = $matches[1].Trim()
+            $current = $matches[2].Trim()
+            $latest = $matches[3].Trim()
+            $id = $matches[4].Trim()
+
+            $isBrowser = $false
+            foreach ($browser in $browsers) {
+                if ($appName -like "*$browser*") { $isBrowser = $true }
+            }
+
+            $color = if ($isBrowser) { "Magenta" } else { "Yellow" }
+            Write-Host "`nUpdate available for: $appName (Current: $current, New: $latest)" -ForegroundColor $color
+            $choice = Read-Host "Update this app? [Y/n]"
+
+            if ($choice -eq 'n' -or $choice -eq 'N') {
+                Write-Host "Skipped: $appName" -ForegroundColor DarkYellow
+            } else {
+                try {
+                    winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                    Write-Host " Updated: $appName" -ForegroundColor Green
+                } catch {
+                    Write-Warning "Failed to update ${appName}: $_"
+                }
+            }
+        }
+    }
+}
+
+# Fallback to Chocolatey if Winget didn’t update anything
+if ($updatesAvailable.Count -eq 0 -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+    try {
+        Write-Host "Attempting to update apps with Chocolatey..." -ForegroundColor Cyan
+        choco upgrade all -y
+    } catch {
+        Write-Warning "Chocolatey update process failed: $_"
+    }
+}
+
+# Fallback to Scoop if needed
+if ($updatesAvailable.Count -eq 0 -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+    try {
+        Write-Host "Attempting to update apps with Scoop..." -ForegroundColor Cyan
+        scoop update *
+    } catch {
+        Write-Warning "Scoop update process failed: $_"
+    }
+}
+
+# Ask about browser reinstalls
+foreach ($browser in $browsers) {
+    $choice = Read-Host "`nWould you like to reinstall $browser? [y/N]"
+    if ($choice -eq 'y' -or $choice -eq 'Y') {
+        try {
+            $pkg = winget list --name "$browser" | Select-String "$browser"
+            if ($pkg) {
+                Write-Host "Uninstalling $browser..." -ForegroundColor Yellow
+                winget uninstall --name "$browser" --accept-package-agreements --accept-source-agreements
+                Start-Sleep -Seconds 5
+            }
+            Write-Host "Installing $browser..." -ForegroundColor Cyan
+            winget install --name "$browser" --accept-package-agreements --accept-source-agreements
+            Write-Host "$browser successfully reinstalled." -ForegroundColor Green
+        } catch {
+            Write-Warning "Error reinstalling ${browser}: $_"
+        }
+    }
+}
+
+Write-Host "`n--- Application Update Process Completed ---`n" -ForegroundColor Cyan
 }
 function Prohibited-Files {
     param (
         [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "users.txt")
+        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", ".txt")
     )
 
     Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
+ # Define prohibited file patterns
+    $prohibitedPatterns = @("*.mp3", "*password*", "*cracker*")
 
+    # Define directories to scan
+    $directoriesToScan = @("C:\Users", "C:\")
+
+    foreach ($directory in $directoriesToScan) {
+        foreach ($pattern in $prohibitedPatterns) {
+            try {
+                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
+                foreach ($file in $files) {
+                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                    Write-Host "Removed prohibited file: $($file.FullName)" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
+            }
+        }
+    }
+    
     foreach ($path in $PathsToCheck) {
         foreach ($pattern in $ProhibitedPatterns) {
             try {
@@ -1098,6 +1137,25 @@ function Unwanted-Software {
         Write-Host "`nNo reboot required." -ForegroundColor Green
     }
 
+    # Define unwanted software patterns
+    $unwantedSoftwarePatterns = @("*Chicken Invaders*", "*HashCat*")
+
+    # Define directories to scan
+    $directoriesToScan = @("C:\Program Files", "C:\Program Files (x86)", "C:\Users")
+
+    foreach ($directory in $directoriesToScan) {
+        foreach ($pattern in $unwantedSoftwarePatterns) {
+            try {
+                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
+                foreach ($file in $files) {
+                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                    Write-Host "Removed unwanted software: $($file.FullName)" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
+            }
+        }
+    }
     Write-Host "`n--- Unwanted Software Cleanup Completed ---`n" -ForegroundColor Cyan
 }
 
@@ -1163,12 +1221,7 @@ function Malware {
     catch {
         Write-Host "Error during malware scan: $_" -ForegroundColor Red
     }
-}
-
-# Adding backdoor removal logic to malware handling
-function RemoveMalware {
-    Write-Host "`n--- Removing Malware ---`n" -ForegroundColor Cyan
-
+    
     # Define backdoor patterns
     $backdoorPatterns = @("*backdoor*", "*remoteadmin*", "*rat*")
 
@@ -1188,9 +1241,9 @@ function RemoveMalware {
             }
         }
     }
-
-    Write-Host "`n--- Malware Removal Completed ---`n" -ForegroundColor Cyan
+     Write-Host "`n--- Malware Removal Completed ---`n" -ForegroundColor Cyan
 }
+
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
 
@@ -1256,91 +1309,31 @@ function Application-Security-Settings {
         }
 
         # Enable Firefox Popup Blocker
-        Write-Host "Enabling Firefox Popup Blocker..." -ForegroundColor Yellow
-        $firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
-        if (Test-Path $firefoxPrefsPath) {
-            $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
-            foreach ($prefsFile in $prefsFiles) {
-                (Get-Content $prefsFile) -replace "user_pref\(\"dom.disable_open_during_load\", false\)", "user_pref(\"dom.disable_open_during_load\", true)" | Set-Content $prefsFile
-                Write-Host "Popup blocker enabled in: $($prefsFile.FullName)" -ForegroundColor Green
-            }
-        } else {
-            Write-Host "Firefox preferences not found. Skipping popup blocker configuration." -ForegroundColor Yellow
-        }
+Write-Host "Enabling Firefox Popup Blocker (removing any existing dom.disable_open_during_load lines)..." -ForegroundColor Yellow
+
+$firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
+
+if (Test-Path $firefoxPrefsPath) {
+    $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
+
+    foreach ($prefsFile in $prefsFiles) {
+        # Read all lines and filter out any that contain the target preference
+        $lines = Get-Content $prefsFile | Where-Object { $_ -notmatch "dom\.disable_open_during_load" }
+
+        # Write the filtered content back to the file
+        $lines | Set-Content $prefsFile
+
+        Write-Host "Removed dom.disable_open_during_load entry from: $($prefsFile.FullName)" -ForegroundColor Green
+    }
+} else {
+    Write-Host "Firefox preferences not found. Skipping popup blocker configuration." -ForegroundColor Yellow
+}
+
 
         Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
     } catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}
-
-# Adding configuration to receive updates for other Microsoft products
-function EnableMicrosoftProductUpdates {
-    Write-Host "`n--- Enabling Updates for Other Microsoft Products ---`n" -ForegroundColor Cyan
-
-    try {
-        # Enable Microsoft Update
-        reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "AllowMUUpdateService" /t REG_DWORD /d 1 /f
-        Write-Host "Updates for other Microsoft products have been enabled." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to enable updates for other Microsoft products: $_" -ForegroundColor Red
-    }
-
-    Write-Host "`n--- Configuration Completed ---`n" -ForegroundColor Cyan
-}
-
-# Updating prohibited file removal logic to include all password cracker archives
-function RemoveProhibitedFiles {
-    Write-Host "`n--- Removing Prohibited Files ---`n" -ForegroundColor Cyan
-
-    # Define prohibited file patterns
-    $prohibitedPatterns = @("*.mp3", "*password*", "*cracker*")
-
-    # Define directories to scan
-    $directoriesToScan = @("C:\Users", "C:\")
-
-    foreach ($directory in $directoriesToScan) {
-        foreach ($pattern in $prohibitedPatterns) {
-            try {
-                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
-                foreach ($file in $files) {
-                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                    Write-Host "Removed prohibited file: $($file.FullName)" -ForegroundColor Green
-                }
-            } catch {
-                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
-            }
-        }
-    }
-
-    Write-Host "`n--- Prohibited File Removal Completed ---`n" -ForegroundColor Cyan
-}
-
-# Adding unwanted software removal logic
-function RemoveUnwantedSoftware {
-    Write-Host "`n--- Removing Unwanted Software ---`n" -ForegroundColor Cyan
-
-    # Define unwanted software patterns
-    $unwantedSoftwarePatterns = @("*Chicken Invaders*", "*HashCat*")
-
-    # Define directories to scan
-    $directoriesToScan = @("C:\Program Files", "C:\Program Files (x86)", "C:\Users")
-
-    foreach ($directory in $directoriesToScan) {
-        foreach ($pattern in $unwantedSoftwarePatterns) {
-            try {
-                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
-                foreach ($file in $files) {
-                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                    Write-Host "Removed unwanted software: $($file.FullName)" -ForegroundColor Green
-                }
-            } catch {
-                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
-            }
-        }
-    }
-
-    Write-Host "`n--- Unwanted Software Removal Completed ---`n" -ForegroundColor Cyan
 }
 
 # Define a list to track completed options
