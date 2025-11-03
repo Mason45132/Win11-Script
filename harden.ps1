@@ -1350,7 +1350,7 @@ function Application-Security-Settings {
         }
 
         # Enable Firefox Popup Blocker
-Write-Host "Enabling Firefox Popup Blocker (removing any existing dom.disable_open_during_load lines)..." -ForegroundColor Yellow
+Write-Host "Enabling Firefox Popup Blocker (setting dom.disable_open_during_load to true)..." -ForegroundColor Yellow
 
 $firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
 
@@ -1358,24 +1358,25 @@ if (Test-Path $firefoxPrefsPath) {
     $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
 
     foreach ($prefsFile in $prefsFiles) {
-        # Read all lines and filter out any that contain the target preference
+        # Read all lines except existing dom.disable_open_during_load entries
         $lines = Get-Content $prefsFile | Where-Object { $_ -notmatch "dom\.disable_open_during_load" }
 
-        # Write the filtered content back to the file
+        # Add the line to enable popup blocker explicitly
+        $lines += 'user_pref("dom.disable_open_during_load", true);'
+
+        # Write the updated content back to the prefs.js file
         $lines | Set-Content $prefsFile
 
-        Write-Host "Removed dom.disable_open_during_load entry from: $($prefsFile.FullName)" -ForegroundColor Green
+        Write-Host "Enabled Firefox popup blocker in: $($prefsFile.FullName)" -ForegroundColor Green
     }
 } else {
     Write-Host "Firefox preferences not found. Skipping popup blocker configuration." -ForegroundColor Yellow
 }
-
-
-        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
+        Write-Host "`n--- Application Security Settings Applied ---`n" -ForegroundColor Cyan
     } catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}
+}   
 
 # Define a list to track completed options
 $completedOptions = @()
