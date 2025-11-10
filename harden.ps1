@@ -1,12 +1,12 @@
 # ===== Variables Section Start =====
 $MaxPasswordAge = 60  # Maximum password age in days
 $MinPasswordAge = 10   # Minimum password age in days
-$TempPassword = '1P@ssword!' # Temporary password for user accounts
+$TempPassword = 'CyberPatriot!' # Temporary password for user accounts
 $MinPasswordLength = 10  # Minimum password length
 $LockoutThreshold = 5  # Account lockout threshold
 $LockoutDuration = 30  # Account lockout duration in minutes
 $LockoutWindow = 30    # Account lockout observation window in minutes
-$passwordhistorySize = 24 # Number of previous passwords to remember
+$passwordhistorySize = 15 # Number of previous passwords to remember
 # Color variables ====
 $HeaderColor = "Cyan"            # Color for headers
 $PromptColor = "Yellow"          # Color for prompts
@@ -16,7 +16,7 @@ $RemovedLineColor = "Red"        # Color for removed lines
 $WarningColor = "Red"            # Color for warnings
 # ===== Variables Section End =====
 
-# Check for admin rights and relaunch as admin if needed                       TempPassword = '?1CyberPatriot!?'
+# Check for admin rights and relaunch as admin if needed                       TempPassword = 'CyberPatriot!'
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Script is not running as administrator. Relaunching as admin..." -ForegroundColor $WarningColor
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -149,7 +149,6 @@ function Document-System {
     Write-Host "Documentation process completed." -ForegroundColor $HeaderColor
 }
 
-
 function Enable-Updates {
     Write-Host "`n--- Starting: Enable Updates ---`n" -ForegroundColor $HeaderColor
 
@@ -160,7 +159,6 @@ function Enable-Updates {
 
     # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-    
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
             if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
@@ -177,7 +175,6 @@ function Enable-Updates {
     Import-Module PSWindowsUpdate
 
     # Search for available updates
-    # ERROR: try  --Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned--
     Write-Host "Searching for available updates..." -ForegroundColor $PromptColor
     try {
         $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -IgnoreReboot -ErrorAction Stop
@@ -224,82 +221,21 @@ function Enable-Updates {
         }
     }
 
-    # --- Chrome Installation/Update Check ---
-    Write-Host "`n--- Checking Google Chrome ---" -ForegroundColor $HeaderColor
+    # --- Remove Internet Explorer ---
+    Write-Host "`n--- Checking for Internet Explorer ---" -ForegroundColor $HeaderColor
 
-    $chromePaths = @(
-        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-        "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
-    )
-    $chromeInstalled = $chromePaths | Where-Object { Test-Path $_ }
-
-    if (-not $chromeInstalled) {
-        Write-Host "Google Chrome is not installed. Installing now..." -ForegroundColor $PromptColor
-        $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-        $tempInstaller = "$env:TEMP\chrome_installer.exe"
-
-        try {
-            Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
-            Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
-            Write-Host "Google Chrome has been installed." -ForegroundColor $KeptLineColor
-        } catch {
-            Write-Host "Failed to install Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-        } finally {
-            if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
-        }
-    } else {
-        Write-Host "Google Chrome is already installed. Checking for updates..." -ForegroundColor $PromptColor
-
-        $chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
-        if (-not (Test-Path $chromeUpdater)) {
-            $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
-        }
-
-        if (Test-Path $chromeUpdater) {
-            try {
-                Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
-                Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
-            } catch {
-                Write-Host "Failed to run Chrome updater: $($_.Exception.Message)" -ForegroundColor $WarningColor
-            }
+    try {
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "Internet-Explorer-Optional-amd64" }
+        if ($ieFeature -and $ieFeature.State -eq "Enabled") {
+            Write-Host "Internet Explorer is installed. Removing now..." -ForegroundColor $PromptColor
+            Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart
+            Write-Host "Internet Explorer has been removed successfully." -ForegroundColor $RemovedLineColor
+            $rebootRequired = $true
         } else {
-            Write-Host "Chrome updater not found. Reinstalling Chrome to restore update functionality..." -ForegroundColor $WarningColor
-
-            $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-            $tempInstaller = "$env:TEMP\chrome_installer.exe"
-
-            try {
-                Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
-                Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
-                Write-Host "Chrome reinstalled successfully. Updater should now be restored." -ForegroundColor $KeptLineColor
-            } catch {
-                Write-Host "Failed to reinstall Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-            } finally {
-                if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
-            }
+            Write-Host "Internet Explorer is not installed." -ForegroundColor $KeptLineColor
         }
-    }
-
-    # --- Firefox Installation/Update Check ---
-    Write-Host "`n--- Checking Firefox ---" -ForegroundColor $HeaderColor
-
-    $firefoxPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
-    if (Test-Path $firefoxPath) {
-        $firefoxVersion = (Get-Item $firefoxPath).VersionInfo.ProductVersion
-        Write-Host "Firefox is installed. Version: $firefoxVersion" -ForegroundColor Green
-    } else {
-        Write-Host "Firefox is not installed. Skipping update check." -ForegroundColor Yellow
-    }
-
-    # --- CCleaner Installation/Update Check ---
-    Write-Host "`n--- Checking CCleaner ---" -ForegroundColor $HeaderColor
-
-    $ccleanerPath = "C:\Program Files\CCleaner\CCleaner.exe"
-    if (Test-Path $ccleanerPath) {
-        $ccleanerVersion = (Get-Item $ccleanerPath).VersionInfo.ProductVersion
-        Write-Host "CCleaner is installed. Version: $ccleanerVersion" -ForegroundColor Green
-    } else {
-        Write-Host "CCleaner is not installed. Skipping update check." -ForegroundColor Yellow
+    } catch {
+        Write-Host "Failed to check or remove Internet Explorer: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 
     # Prompt for reboot if needed
@@ -586,20 +522,6 @@ function Account-Policies {
         return
     }
 
-    # Set password history
-    Write-Host "Enforcing password history to remember last 24 passwords..." -ForegroundColor Yellow
-    try {
-    
-        secedit /export /cfg temp.inf
-        (Get-Content temp.inf).replace("$passwordhistorySize = 0", "$passwordhistorySize = 24") | Set-Content temp_modified.inf
-        secedit /configure /db secedit.sdb /cfg temp_modified.inf /areas SECURITYPOLICY | Out-Null
-        Remove-Item temp.inf, temp_modified.inf -Force
-        Write-Host "Password history policy set successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to set password history: $($_.Exception.Message)" -ForegroundColor Red
-        return
-    }
-
     # Enforce password complexity
     Write-Host "Enforcing password complexity requirements..." -ForegroundColor Yellow
     try {
@@ -652,6 +574,27 @@ function Account-Policies {
         Write-Host "Failed to set Account Lockout Duration: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
+# Apply the new setting
+secedit /export /cfg C:\temp\secpol.cfg
+
+# Read the exported security policy
+(Get-Content C:\temp\secpol.cfg) |
+ForEach-Object {
+    if ($_ -match "^PasswordHistorySize") {
+        "PasswordHistorySize = $passwordhistorySize"
+    }
+    else {
+        $_
+    }
+} | Set-Content C:\temp\secpol.cfg
+
+# Import the updated policy
+secedit /configure /db C:\Windows\Security\Local.sdb /cfg C:\temp\secpol.cfg /areas SECURITYPOLICY
+
+# Cleanup
+Remove-Item C:\temp\secpol.cfg -Force
+
+Write-Host "Password history length successfully set to $passwordhistorysize."
 
     Write-Host "`n--- Finished: Setting Account Policies ---`n" -ForegroundColor Cyan
 }
@@ -704,38 +647,27 @@ function Local-Policies {
 }
 
 function EnableDefensiveCountermeasures {
-    Write-Host "`n--- Enabling Defensive Countermeasures ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Starting: Defensive Countermeasures ---`n" -ForegroundColor $HeaderColor
 
-    # Enable Firewall Protection
-    Write-Host "Enabling Windows Firewall protection..." -ForegroundColor Cyan
+    # Example: Enable Windows Defender
+    Write-Host "Enabling Windows Defender..." -ForegroundColor $PromptColor
+    try {
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        Write-Host "Windows Defender enabled successfully." -ForegroundColor $KeptLineColor
+    } catch {
+        Write-Host "Failed to enable Windows Defender: $($_.Exception.Message)" -ForegroundColor $WarningColor
+    }
+
+    # Example: Configure firewall settings
+    Write-Host "Configuring Windows Firewall..." -ForegroundColor $PromptColor
     try {
         Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
-        Write-Host "Windows Firewall protection enabled for all profiles." -ForegroundColor Green
+        Write-Host "Windows Firewall configured successfully." -ForegroundColor $KeptLineColor
     } catch {
-        Write-Host "Failed to enable Windows Firewall protection: $_" -ForegroundColor Red
+        Write-Host "Failed to configure Windows Firewall: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 
-    # Check if Screen Saver is Secure
-    Write-Host "Checking and securing screen saver settings..." -ForegroundColor Cyan
-    try {
-        reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 1 /f
-        reg add "HKCU\Control Panel\Desktop" /v ScreenSaverIsSecure /t REG_SZ /d 1 /f
-        reg add "HKCU\Control Panel\Desktop" /v ScreenSaveTimeOut /t REG_SZ /d 900 /f
-        Write-Host "Screen saver is now secure and set to activate after 15 minutes." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to secure screen saver settings: $_" -ForegroundColor Red
-    }
-
-    # Disable AutoRun Commands for All Users
-    Write-Host "Disabling AutoRun commands for all users..." -ForegroundColor Cyan
-    try {
-        reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoDriveTypeAutoRun /t REG_DWORD /d 255 /f
-        Write-Host "AutoRun commands have been disabled for all users." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to disable AutoRun commands: $_" -ForegroundColor Red
-    }
-
-    Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Defensive Countermeasures process completed ---`n" -ForegroundColor $HeaderColor
 }
 
 function UncategorizedOSSettings {
@@ -1039,69 +971,97 @@ foreach ($browser in $browsers) {
 Write-Host "`n--- Application Update Process Completed ---`n" -ForegroundColor Cyan
 }
 function Prohibited-Files {
-    param (
-        [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "*.txt", "*.mp3", "*password*", "*cracker*")
-    )
+$searchRoot = "C:\Users"
+$logFile = "C:\temp\PasswordFiles_AllUsers.log"
+$keywords = "password","pwd","secret","token"
+$extensions = "*.txt","*.log","*.config","*.json","*.env","*.xml","*.ps1","*.bat"
 
-    Write-Host "`n=== Starting scan for prohibited files ===`n" -ForegroundColor Cyan
+# Ensure log folder exists
+if (-not (Test-Path "C:\temp")) { New-Item -Path "C:\temp" -ItemType Directory }
 
-    # Directories to skip for safety
-    $systemDirs = @(
-        "C:\Windows",
-        "C:\Program Files",
-        "C:\Program Files (x86)",
-        "C:\ProgramData",
-        "C:\Recovery",
-        "C:\$Recycle.Bin",
-        "C:\System Volume Information"
-    )
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
 
-    foreach ($path in $PathsToCheck) {
-        Write-Host "`nScanning directory: $path" -ForegroundColor Magenta
+Write-Host "Scanning all user folders in $searchRoot..." -ForegroundColor Cyan
 
-        foreach ($pattern in $ProhibitedPatterns) {
-            Write-Host " → Looking for pattern '$pattern'..." -ForegroundColor Cyan
+# Get all user folders
+$users = Get-ChildItem -Path $searchRoot -Directory -ErrorAction SilentlyContinue
+
+foreach ($user in $users) {
+    Write-Host "`nChecking user: $($user.Name)" -ForegroundColor Green
+    try {
+        Get-ChildItem -Path $user.FullName -Recurse -Include $extensions -File -ErrorAction SilentlyContinue | 
+        ForEach-Object {
+            $file = $_.FullName
             try {
-                $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue |
-                              Where-Object { 
-                                  # Skip protected/system directories
-                                  $skip = $false
-                                  foreach ($sysDir in $systemDirs) {
-                                      if ($_.FullName -like "$sysDir*") { $skip = $true; break }
-                                  }
-                                  return -not $skip
-                              }
-
-                if ($foundFiles) {
-                    foreach ($file in $foundFiles) {
-                        Write-Host "Found prohibited file: $($file.FullName)" -ForegroundColor Yellow
-
-                        try {
-                            # Try direct removal first
-                            Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                            Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
-                        } catch {
-                            # Attempt to take ownership only if in non-system area
-                            Write-Host "Access denied. Trying to take ownership of: $($file.FullName)" -ForegroundColor DarkYellow
-                            try {
-                                takeown /F "$($file.FullName)" /A /R /D Y | Out-Null
-                                icacls "$($file.FullName)" /grant Administrators:F /T /C | Out-Null
-                                Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host "Deleted (after taking ownership): $($file.FullName)" -ForegroundColor Green
-                            } catch {
-                                Write-Warning "Failed to delete $($file.FullName): $_"
-                            }
+                $content = Get-Content $file -ErrorAction SilentlyContinue
+                foreach ($keyword in $keywords) {
+                    if ($content -match $keyword) {
+                        Write-Host "Possible password found in: $file" -ForegroundColor Yellow
+                        Add-Content -Path $logFile -Value "Possible password in file: $file"
+                        
+                        # Prompt to delete or skip
+                        $choice = Read-Host "Delete this file? (Y/N)"
+                        if ($choice -match '^[Yy]$') {
+                            Remove-Item -Path $file -Force
+                            Write-Host "Deleted: $file" -ForegroundColor Red
+                        } else {
+                            Write-Host "Skipped: $file" -ForegroundColor Gray
                         }
+
+                        break # Stop checking other keywords in the same file
                     }
-                } else {
-                    Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor DarkGreen
                 }
-            } catch {
-                Write-Warning "Error scanning $path for pattern $pattern : $_"
-            }
+            } catch { Write-Host "Cannot read file: $file" -ForegroundColor DarkRed }
         }
+    } catch { Write-Host "Cannot access folder: $($user.FullName)" -ForegroundColor DarkRed }
+}
+# Configuration
+$logFile = "C:\Temp\DisableHiddenShares.log"
+
+# Ensure log folder exists
+if (-not (Test-Path "C:\Temp")) { New-Item -Path "C:\Temp" -ItemType Directory -Force }
+
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+# Remove existing hidden/admin shares
+$hiddenShares = Get-SmbShare | Where-Object { $_.Name -like "*$" }
+foreach ($share in $hiddenShares) {
+    try {
+        Remove-SmbShare -Name $share.Name -Force
+        Add-Content -Path $logFile -Value "Removed share: $($share.Name)"
+    } catch {
+        Add-Content -Path $logFile -Value "Failed to remove share: $($share.Name)"
     }
+}
+
+# Disable automatic admin shares
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+try {
+    New-ItemProperty -Path $regPath -Name "AutoShareServer" -PropertyType DWORD -Value 0 -Force
+    Add-Content -Path $logFile -Value "Set AutoShareServer = 0"
+} catch {
+    Add-Content -Path $logFile -Value "Failed to set AutoShareServer = 0"
+}
+
+# Restart Server service
+try {
+    Restart-Service -Name "LanmanServer"
+    Add-Content -Path $logFile -Value "Server service restarted"
+} catch {
+    Add-Content -Path $logFile -Value "Failed to restart Server service"
+}
+
+# Verify hidden/admin shares
+$hiddenSharesAfter = Get-SmbShare | Where-Object { $_.Name -like "*$" }
+if ($hiddenSharesAfter.Count -eq 0) {
+    Add-Content -Path $logFile -Value "All hidden/admin shares removed"
+} else {
+    Add-Content -Path $logFile -Value "Some hidden/admin shares remain: $($hiddenSharesAfter.Name -join ', ')"
+}
+
+Write-Host "`nScan complete. Check $logFile for full list of potential password files." -ForegroundColor Cyan
 
     Write-Host "`n=== Prohibited files scan completed ===`n" -ForegroundColor Cyan
 }
@@ -1282,11 +1242,189 @@ function Malware {
             }
         }
     }
+    # Configuration =================
+$logFile = "C:\Temp\NetcatRemoval.log"
+$ncNames = "nc.exe","ncat.exe"
+
+# Ensure log folder exists
+if (-not (Test-Path "C:\Temp")) { New-Item -Path "C:\Temp" -ItemType Directory -Force }
+
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+Write-Host "=== Starting Netcat Backdoor Removal ===" -ForegroundColor Cyan
+
+# Stop running Netcat processes =================
+Write-Host "`n[1] Detecting running Netcat processes..." -ForegroundColor Yellow
+$ncProcesses = Get-Process | Where-Object { $ncNames -contains $_.Name.ToLower() }
+
+foreach ($proc in $ncProcesses) {
+    try {
+        Write-Host "Stopping process: $($proc.Name) (PID: $($proc.Id))"
+        Stop-Process -Id $proc.Id -Force
+        Add-Content -Path $logFile -Value "Stopped process: $($proc.Name) (PID: $($proc.Id))"
+    } catch {
+        Write-Host "Failed to stop process: $($proc.Name) (PID: $($proc.Id))" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to stop process: $($proc.Name) (PID: $($proc.Id))"
+    }
+}
+
+# Find and remove Netcat executables =================
+Write-Host "`n[2] Searching for Netcat executables..." -ForegroundColor Yellow
+foreach ($name in $ncNames) {
+    $files = Get-ChildItem -Path C:\ -Recurse -Include $name -ErrorAction SilentlyContinue
+    foreach ($file in $files) {
+        try {
+            Write-Host "Deleting executable: $($file.FullName)"
+            Remove-Item -Path $file.FullName -Force
+            Add-Content -Path $logFile -Value "Deleted executable: $($file.FullName)"
+        } catch {
+            Write-Host "Failed to delete: $($file.FullName)" -ForegroundColor Red
+            Add-Content -Path $logFile -Value "Failed to delete: $($file.FullName)"
+        }
+    }
+}
+
+#  Remove persistence from Startup folders =================
+Write-Host "`n[3] Checking Startup folders..." -ForegroundColor Yellow
+$startupPaths = @(
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup",
+    "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+)
+
+foreach ($path in $startupPaths) {
+    $files = Get-ChildItem -Path $path -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $ncNames -contains $_.Name.ToLower() }
+    foreach ($file in $files) {
+        try {
+            Write-Host "Deleting startup file: $($file.FullName)"
+            Remove-Item -Path $file.FullName -Force
+            Add-Content -Path $logFile -Value "Deleted startup file: $($file.FullName)"
+        } catch {
+            Write-Host "Failed to delete startup file: $($file.FullName)" -ForegroundColor Red
+            Add-Content -Path $logFile -Value "Failed to delete startup file: $($file.FullName)"
+        }
+    }
+}
+
+# Remove registry Run entries =================
+Write-Host "`n[4] Checking Registry Run keys..." -ForegroundColor Yellow
+$regPaths = @(
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+)
+
+foreach ($reg in $regPaths) {
+    try {
+        $props = Get-ItemProperty -Path $reg -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+        foreach ($prop in $props) {
+            $val = (Get-ItemProperty -Path $reg -Name $prop -ErrorAction SilentlyContinue).$prop
+            if ($ncNames | ForEach-Object { $val -like "*$_*" }) {
+                Write-Host "Removing registry entry: $prop = $val"
+                Remove-ItemProperty -Path $reg -Name $prop -Force
+                Add-Content -Path $logFile -Value "Removed registry entry: $prop = $val"
+            }
+        }
+    } catch {
+        Write-Host "Cannot access registry path: $reg" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to access registry: $reg"
+    }
+}
+
+# Remove scheduled tasks =================
+Write-Host "`n[5] Checking Scheduled Tasks..." -ForegroundColor Yellow
+$tasks = Get-ScheduledTask | Where-Object { $_.TaskName -like "*nc*" -or $_.TaskPath -like "*nc*" }
+foreach ($task in $tasks) {
+    try {
+        Write-Host "Deleting scheduled task: $($task.TaskName)"
+        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false
+        Add-Content -Path $logFile -Value "Deleted scheduled task: $($task.TaskName)"
+    } catch {
+        Write-Host "Failed to delete scheduled task: $($task.TaskName)" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to delete scheduled task: $($task.TaskName)"
+    }
+}
+
+Write-Host "`n=== Netcat Removal Complete ===" -ForegroundColor Green
+Write-Host "Check log file: $logFile" -ForegroundColor Cyan
+
      Write-Host "`n--- Malware Removal Completed ---`n" -ForegroundColor Cyan
 }
 
+
+# --- Application Security Settings ---
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
+    try {
+        # Block App Execution from Temp & Downloads (ASR rules must be set via GPO or Defender)
+        Write-Host "Blocking execution from Temp and Downloads folders (manual ASR rule required)..." -ForegroundColor Yellow
+        # Enable SmartScreen for Microsoft Store apps
+        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
+        # Enable SmartScreen for Edge
+        $edgeSmartScreenPath = "HKCU:\Software\Microsoft\Edge"
+        if (-not (Test-Path $edgeSmartScreenPath)) { New-Item -Path $edgeSmartScreenPath -Force | Out-Null }
+        Set-ItemProperty -Path $edgeSmartScreenPath -Name "SmartScreenEnabled" -Value 1 -Force
+        # Enable Controlled Folder Access
+        Set-MpPreference -EnableControlledFolderAccess Enabled
+        # Disallow unsigned PowerShell scripts
+        try {
+            $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
+            if ($currentPolicy -ne "AllSigned") {
+                Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
+                Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
+            }
+        } catch { Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow }
+        # Ask to install or remove Internet Explorer
+        $ieChoice = Read-Host "Install or Remove Internet Explorer? [Install/Remove/Skip]"
+        if ($ieChoice -eq "Install") {
+            Enable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+        } elseif ($ieChoice -eq "Remove") {
+            Disable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+        }
+        # Enable Firefox Popup Blocker
+        $firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
+        if (Test-Path $firefoxPrefsPath) {
+            $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
+            foreach ($prefsFile in $prefsFiles) {
+                $lines = Get-Content $prefsFile | Where-Object { $_ -notmatch "dom\.disable_open_during_load" }
+                $lines += 'user_pref("dom.disable_open_during_load", true);'
+                $lines | Set-Content $prefsFile
+            }
+        }
+        Write-Host "`n--- Application Security Settings Applied ---`n" -ForegroundColor Cyan
+    } catch { Write-Host "Error applying application security settings: $_" -ForegroundColor Red }
+}
+
+# --- Main Menu Loop ---
+$completedOptions = @()
+menu: do {
+    Write-Host "`nSelect an option:`n"
+    for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+        if ($completedOptions -contains $menuOptions[$i]) {
+            Write-Host "$($i + 1). $($menuOptions[$i])" -ForegroundColor $EmphasizedNameColor
+        } else {
+            Write-Host "$($i + 1). $($menuOptions[$i])"
+        }
+    }
+    $selection = Read-Host "`nEnter the number of your choice"
+    switch ($selection) {
+        "1"  { Document-System; $completedOptions += $menuOptions[0] }
+        "2"  { Enable-Updates; $completedOptions += $menuOptions[1] }
+        "3"  { AuditUsers; $completedOptions += $menuOptions[2] }
+        "4"  { Account-Policies; $completedOptions += $menuOptions[3] }
+        "5"  { Local-Policies; $completedOptions += $menuOptions[4] }
+        "6"  { EnableDefensiveCountermeasures; $completedOptions += $menuOptions[5] }
+        "7"  { UncategorizedOSSettings; $completedOptions += $menuOptions[6] }
+        "8"  { Service-Auditing; $completedOptions += $menuOptions[7] }
+        "9"  { OS-Updates; $completedOptions += $menuOptions[8] }
+        "10" { Application-Updates; $completedOptions += $menuOptions[9] }
+        "11" { Prohibited-Files; $completedOptions += $menuOptions[10] }
+        "12" { Unwanted-Software; $completedOptions += $menuOptions[11] }
+        "13" { Malware; $completedOptions += $menuOptions[12] }
+        "14" { Application-Security-Settings; $completedOptions += $menuOptions[13] }
+        "15" { Write-Host "`nExiting..."; break menu }
+        default { Write-Host "`nInvalid selection. Please try again." -ForegroundColor $WarningColor }
+    }
+} while ($true)
 
     try {
         # Block App Execution from Temp & Downloads
@@ -1376,7 +1514,6 @@ if (Test-Path $firefoxPrefsPath) {
     } catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}   
 
 # Define a list to track completed options
 $completedOptions = @()
