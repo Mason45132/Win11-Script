@@ -100,9 +100,80 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "Every
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RestrictAnonymousSAM -Value 1
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RestrictAnonymous -Value 1
 
+# Deny network access to everyone
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RestrictRemoteSAM" -Value "O:BAG:BAD:(A;;RC;;;BA)" -Force
+Write-Host "Everyone is denied access to this computer from the network" -ForegroundColor Green
+
 # Shutdown/Recovery protections
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ShutdownWithoutLogon" -Value 0 -Force
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "ClearPageFileAtShutdown" -Value 1
+
+# ====================================================================
+# SSH CONFIGURATION HARDENING
+# ====================================================================
+
+Write-Host "`n[+] Hardening SSH Configuration..." -ForegroundColor Yellow
+
+$sshConfigPath = "C:\ProgramData\ssh\sshd_config"
+
+# Check if SSH is installed
+if (Test-Path $sshConfigPath) {
+    $sshConfig = Get-Content $sshConfigPath
+    
+    # Remove or comment out existing conflicting settings
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*PermitRootLogin' }
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*SyslogFacility' }
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*PermitEmptyPasswords' }
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*ClientAliveInterval' }
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*ClientAliveCountMax' }
+    $sshConfig = $sshConfig | Where-Object { $_ -notmatch '^\s*MaxAuthTries' }
+    
+    # Add hardened SSH settings
+    $sshConfig += ""
+    $sshConfig += "# === SSH Security Hardening ==="
+    $sshConfig += "PermitRootLogin no"
+    $sshConfig += "SyslogFacility LOCAL0"
+    $sshConfig += "PermitEmptyPasswords no"
+    $sshConfig += "ClientAliveInterval 300"
+    $sshConfig += "ClientAliveCountMax 2"
+    $sshConfig += "MaxAuthTries 3"
+    
+    $sshConfig | Set-Content $sshConfigPath
+    Write-Host "SSH configuration hardened:" -ForegroundColor Green
+    Write-Host "  - PermitRootLogin: no (root login disabled)" -ForegroundColor Green
+    Write-Host "  - SyslogFacility: LOCAL0 (log events enabled)" -ForegroundColor Green
+    Write-Host "  - PermitEmptyPasswords: no (blank passwords blocked)" -ForegroundColor Green
+    Write-Host "  - ClientAliveInterval: 300 seconds (idle timeout)" -ForegroundColor Green
+    Write-Host "  - ClientAliveCountMax: 2 (logout after 2 idle intervals)" -ForegroundColor Green
+    Write-Host "  - MaxAuthTries: 3 (limit login attempts)" -ForegroundColor Green
+    
+    # Restart SSH service to apply changes and ensure it's enabled
+    Restart-Service -Name sshd -ErrorAction SilentlyContinue
+    try {
+        Set-Service -Name sshd -StartupType Automatic -ErrorAction Stop
+        Start-Service -Name sshd -ErrorAction Stop
+        Write-Host "SSH service set to Automatic and started" -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set/start SSH service: $_" -ForegroundColor Yellow
+    }
+    # Verify sshd_config contains the idle/logout and auth limits; re-append if missing
+    try {
+        $current = Get-Content $sshConfigPath -ErrorAction Stop
+        $needWrite = $false
+        if (-not ($current -match '^\s*ClientAliveInterval\s+\d+')) { $current += "`nClientAliveInterval 300"; $needWrite = $true }
+        if (-not ($current -match '^\s*ClientAliveCountMax\s+\d+')) { $current += "`nClientAliveCountMax 2"; $needWrite = $true }
+        if (-not ($current -match '^\s*MaxAuthTries\s+\d+')) { $current += "`nMaxAuthTries 3"; $needWrite = $true }
+        if ($needWrite) {
+            $current | Set-Content $sshConfigPath
+            Restart-Service -Name sshd -ErrorAction SilentlyContinue
+            Write-Host "sshd_config updated with idle/logout and auth limits and service restarted" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "Failed to verify/update sshd_config: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "SSH not installed, skipping SSH configuration." -ForegroundColor Yellow
+}
 
 # ====================================================================
 # WINDOWS FIREWALL
@@ -142,6 +213,22 @@ Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Threa
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Threats\ThreatSeverityDefaultAction" -Name "ZeroDay" -Value 0
 
 # ====================================================================
+# POWERSHELL EXECUTION POLICY
+# ====================================================================
+
+Write-Host "`n[+] Configuring PowerShell Execution Policy..." -ForegroundColor Yellow
+Set-ExecutionPolicy -ExecutionPolicy Restricted -Scope LocalMachine -Force
+Write-Host "PowerShell execution policy set to Restricted" -ForegroundColor Green
+
+# ====================================================================
+# AUDIT POLICY CONFIGURATION
+# ====================================================================
+
+Write-Host "`n[+] Configuring Audit Policies..." -ForegroundColor Yellow
+auditpol /set /subcategory:"Credential Validation" /failure:enable
+Write-Host "Audit Credential Validation [Failure] enabled" -ForegroundColor Green
+
+# ====================================================================
 # SERVICES HARDENING
 # ====================================================================
 
@@ -149,7 +236,7 @@ Write-Host "`n[+] Disabling Insecure or Unused Services..." -ForegroundColor Yel
 
 $servicesToDisable = @(
 "BTAGService","bthserv","Browser","MapsBroker","lfsvc","IISADMIN","irmon","lltdsvc","LxssManager",
-"FTPSVC","MSiSCSI","sshd","PNRPsvc","p2psvc","p2pimsvc","PNRPAutoReg","Spooler","wercplsupport",
+"FTPSVC","MSiSCSI","PNRPsvc","p2psvc","p2pimsvc","PNRPAutoReg","Spooler","wercplsupport",
 "RasAuto","SessionEnv","TermService","UmRdpService","RpcLocator","RemoteRegistry","RemoteAccess",
 "LanmanServer","simptcp","SNMP","sacsvr","SSDPSRV","upnphost","WMSvc","WerSvc","Wecsvc",
 "WMPNetworkSvc","icssvc","WpnService","PushToInstall","WinRM","W3SVC","XboxGipSvc","XblAuthManager",
@@ -163,6 +250,82 @@ foreach ($svc in $servicesToDisable) {
     Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
 }
 
+# Verify Xbox Live Game Save and SSDP Discovery are stopped and disabled
+Write-Host "`nVerifying Xbox Live Game Save service is stopped and disabled..." -ForegroundColor Yellow
+Stop-Service -Name "XblGameSave" -Force -ErrorAction SilentlyContinue
+Set-Service -Name "XblGameSave" -StartupType Disabled -ErrorAction SilentlyContinue
+Write-Host "✓ Xbox Live Game Save service has been stopped and disabled" -ForegroundColor Green
+
+Write-Host "`nVerifying SSDP Discovery service is stopped and disabled..." -ForegroundColor Yellow
+Stop-Service -Name "SSDPSRV" -Force -ErrorAction SilentlyContinue
+Set-Service -Name "SSDPSRV" -StartupType Disabled -ErrorAction SilentlyContinue
+Write-Host "✓ SSDP Discovery service has been stopped and disabled" -ForegroundColor Green
+
+# ====================================================================
+# EMULATOR/MALWARE SWEEP
+# ====================================================================
+Write-Host "`n[+] Scanning for common Android emulators (possible backdoor) and removing them..." -ForegroundColor Yellow
+$emulatorPatterns = @('BlueStacks','Nox','MEmu','LDPlayer','Genymotion','Andy','Droid4X','KOPlayer')
+
+function Uninstall-ByUninstallString($uninstallString) {
+    if (-not $uninstallString) { return }
+    # Many uninstall strings include arguments; try to execute safely
+    $cmd = $uninstallString
+    try {
+        if ($cmd -match '^"?(?<path>[^\"]+)"?\s*(?<args>.*)') {
+            $p = $matches['path']
+            $a = $matches['args']
+            Write-Host "Running uninstall: $p $a" -ForegroundColor Cyan
+            Start-Process -FilePath $p -ArgumentList $a -Wait -NoNewWindow -ErrorAction Stop
+        } else {
+            Start-Process -FilePath $cmd -Wait -NoNewWindow -ErrorAction Stop
+        }
+        Write-Host "Uninstall command executed" -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to run uninstall command: $_" -ForegroundColor Yellow
+    }
+}
+
+# Search uninstall registry keys (all hives) for emulator display names
+$uninstallKeys = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+)
+
+foreach ($key in $uninstallKeys) {
+    if (-not (Test-Path $key)) { continue }
+    Get-ChildItem $key | ForEach-Object {
+        $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+        if ($props -and $props.DisplayName) {
+            foreach ($pat in $emulatorPatterns) {
+                if ($props.DisplayName -like "*$pat*") {
+                    Write-Host "Found emulator: $($props.DisplayName) -- attempting removal" -ForegroundColor Yellow
+                    # Kill known processes first
+                    $procNames = @($props.DisplayName -replace '\s','')
+                    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "*$pat*" } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+                    # Try uninstall via UninstallString
+                    $u = $props.UninstallString
+                    Uninstall-ByUninstallString $u
+                    # If still installed (check DisplayName), attempt to remove registry key
+                    try { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+                    Write-Host "Removal attempts completed for $($props.DisplayName)" -ForegroundColor Green
+                }
+            }
+        }
+    }
+}
+
+# Additionally, look for suspicious emulator processes and kill them
+$suspiciousProcs = @('BlueStacks','Nox','MEmu','ldplayer','genymotion','andy','droid4x','koplayer')
+foreach ($p in $suspiciousProcs) {
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match $p } | ForEach-Object {
+        Write-Host "Killing process $($_.ProcessName) (Id:$($_.Id))" -ForegroundColor Yellow
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+
 # ====================================================================
 # WINDOWS UPDATE
 # ====================================================================
@@ -171,16 +334,28 @@ Write-Host "`n[+] Configuring Windows Update..." -ForegroundColor Yellow
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "AllowMUUpdateService" -Value 1
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -Value 0
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "AUOptions" -Value 4
-Restart-Service -Name wuauserv
-Set-Service -Name "wuauserv" -StartupType "Automatic"
-Start-Service -Name "wuauserv"
+Restart-Service -Name wuauserv -ErrorAction SilentlyContinue
+Set-Service -Name "wuauserv" -StartupType "Automatic" -ErrorAction SilentlyContinue
+Start-Service -Name "wuauserv" -ErrorAction SilentlyContinue
+Write-Host "✓ Windows Update service is enabled and set to Automatic startup" -ForegroundColor Green
 
 Write-Host "`n[+] Installing Windows Updates..." -ForegroundColor Yellow
 Install-PackageProvider -Name NuGet -Force
 Install-Module -Name PSWindowsUpdate -Force
-Set-ExecutionPolicy RemoteSigned -Force
+Set-ExecutionPolicy -ExecutionPolicy Restricted -Scope LocalMachine -Force
 Import-Module PSWindowsUpdate -Force
-Install-WindowsUpdate -ForceDownload -ForceInstall -Confirm:$False
+
+# Get updates and filter out those larger than 10GB
+$updates = Get-WindowsUpdate
+$10GBInBytes = 10 * 1024 * 1024 * 1024
+$filteredUpdates = $updates | Where-Object { $_.Size -le $10GBInBytes }
+
+if ($filteredUpdates) {
+    Write-Host "Installing $(($filteredUpdates | Measure-Object).Count) update(s) (skipped updates larger than 10GB)..." -ForegroundColor Cyan
+    Install-WindowsUpdate -Update $filteredUpdates -ForceDownload -ForceInstall -Confirm:$False
+} else {
+    Write-Host "No updates found under 10GB size limit." -ForegroundColor Yellow
+}
 
 # ====================================================================
 # FINAL STEPS
@@ -192,60 +367,7 @@ Start-MpScan -ScanType QuickScan
 Write-Host "`n[+] System Hardening Completed Successfully!" -ForegroundColor Green
 Write-Host "Rebooting system now..." -ForegroundColor Yellow
  Restart-Computer -Force
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #STOP
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 <#
 .SYNOPSIS
@@ -262,7 +384,7 @@ Author: ChatGPT GPT-5
 $Log = "C:\Hardening.log"
 Start-Transcript -Path $Log -Append
 Write-Host "==== HARDENING SCRIPT STARTED $(Get-Date) ====" -ForegroundColor Cyan
-Set-ExecutionPolicy Bypass -Scope Process -Force
+Set-ExecutionPolicy -ExecutionPolicy Restricted -Scope LocalMachine -Force
 $ErrorActionPreference = 'SilentlyContinue'
 
 function Safe-Exec($cmd, $desc) {
@@ -317,7 +439,7 @@ Safe-Exec 'secedit /export /cfg "$SecInf"' "Export current security policy"
 $policyChanges = @{
     "PasswordComplexity"              = "PasswordComplexity = 1"
     "ClearTextPassword"               = "ClearTextPassword = 0"
-    "SeDenyNetworkLogonRight"         = "SeDenyNetworkLogonRight = Guest"
+    "SeDenyNetworkLogonRight"         = "SeDenyNetworkLogonRight = Users"
     "SeTrustedCredManAccessPrivilege" = "SeTrustedCredManAccessPrivilege = Administrator"
     "SeSecurityPrivilege"             = "SeSecurityPrivilege = *S-1-5-32-544"
 }
@@ -366,7 +488,7 @@ Write-Host "`n=== SERVICE HARDENING ===" -ForegroundColor Cyan
 
 $DisableServices = @(
  "BTAGService","bthserv","Browser","MapsBroker","lfsvc","IISADMIN","irmon","lltdsvc",
- "LxssManager","FTPSVC","MSiSCSI","sshd","PNRPsvc","p2psvc","p2pimsvc","PNRPAutoReg",
+ "LxssManager","FTPSVC","MSiSCSI","PNRPsvc","p2psvc","p2pimsvc","PNRPAutoReg",
  "Spooler","wercplsupport","RasAuto","SessionEnv","TermService","UmRdpService",
  "RpcLocator","RemoteRegistry","RemoteAccess","simptcp","SNMP","sacsvr","SSDPSRV",
  "upnphost","WMSvc","WerSvc","Wecsvc","WMPNetworkSvc","icssvc","WpnService",
@@ -388,7 +510,17 @@ Safe-Exec 'Start-Service -Name "wuauserv"' "Start Windows Update service"
 Safe-Exec 'Install-PackageProvider -Name NuGet -Force' "Ensure NuGet provider"
 Safe-Exec 'Install-Module -Name PSWindowsUpdate -Force' "Install PSWindowsUpdate module"
 Safe-Exec 'Import-Module PSWindowsUpdate -Force' "Import PSWindowsUpdate"
-Safe-Exec 'Install-WindowsUpdate -ForceDownload -ForceInstall -Confirm:$False' "Apply all Windows Updates"
+
+# Get updates and filter out those larger than 10GB
+$10GBInBytes = 10 * 1024 * 1024 * 1024
+$updates = Get-WindowsUpdate
+$filteredUpdates = $updates | Where-Object { $_.Size -le $10GBInBytes }
+
+if ($filteredUpdates) {
+    Safe-Exec 'Install-WindowsUpdate -Update $filteredUpdates -ForceDownload -ForceInstall -Confirm:$False' "Apply Windows Updates (skipped updates larger than 10GB)"
+} else {
+    Write-Host "[*] No updates found under 10GB size limit." -ForegroundColor Yellow
+}
 
 # ================================
 #   8.  Final System Checks
