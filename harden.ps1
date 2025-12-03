@@ -1,8 +1,13 @@
 # ===== Variables Section Start =====
 $MaxPasswordAge = 60  # Maximum password age in days
-$TempPassword = '1CyberPatriot!' # Temporary password for user accounts
-$MinPasswordLength = 20  # Minimum password length
-# Color variables
+$MinPasswordAge = 10   # Minimum password age in days
+$TempPassword = 'CyberPatriot!' # Temporary password for user accounts
+$MinPasswordLength = 10  # Minimum password length
+$LockoutThreshold = 5  # Account lockout threshold
+$LockoutDuration = 30  # Account lockout duration in minutes
+$LockoutWindow = 30    # Account lockout observation window in minutes
+$passwordhistorySize = 15 # Number of previous passwords to remember
+# Color variables ====
 $HeaderColor = "Cyan"            # Color for headers
 $PromptColor = "Yellow"          # Color for prompts
 $EmphasizedNameColor = "Green"   # Color for emphasized names
@@ -11,7 +16,7 @@ $RemovedLineColor = "Red"        # Color for removed lines
 $WarningColor = "Red"            # Color for warnings
 # ===== Variables Section End ======
 
-# Check for admin rights and relaunch as admin if needed
+# Check for admin rights and relaunch as admin if needed                       TempPassword = 'CyberPatriot!'
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Script is not running as administrator. Relaunching as admin..." -ForegroundColor $WarningColor
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -144,15 +149,21 @@ function Document-System {
     Write-Host "Documentation process completed." -ForegroundColor $HeaderColor
 }
 
-
 function Enable-Updates {
     Write-Host "`n--- Starting: Enable Updates ---`n" -ForegroundColor $HeaderColor
+
+    $rebootRequired = $false
+
+    # Ensure TLS 1.2 is enabled for secure downloads (only once per session)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     # Check if PSWindowsUpdate module is available, install if not
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         Write-Host "The 'PSWindowsUpdate' module is not installed. Installing now..." -ForegroundColor $PromptColor
         try {
-            Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+            }
             Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
             Write-Host "'PSWindowsUpdate' module installed successfully." -ForegroundColor $EmphasizedNameColor
         } catch {
@@ -177,7 +188,6 @@ function Enable-Updates {
     } else {
         Write-Host "`nFound $($updates.Count) update(s)." -ForegroundColor $EmphasizedNameColor
 
-        # Loop through each update and ask before installing
         foreach ($update in $updates) {
             Write-Host "`nUpdate: $($update.Title)" -ForegroundColor $PromptColor
             $answer = Read-Host "Do you want to install this update? [Y/n] (default Y)"
@@ -189,75 +199,61 @@ function Enable-Updates {
 
             try {
                 Write-Host "Installing update: $($update.Title)" -ForegroundColor $EmphasizedNameColor
-                Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+
+                if ($update.KBArticleIDs -and $update.KBArticleIDs.Count -gt 0) {
+                    Install-WindowsUpdate -KBArticleID $update.KBArticleIDs[0] -AcceptAll -IgnoreReboot -ErrorAction Stop
+                } elseif ($update.UpdateID) {
+                    Install-WindowsUpdate -UpdateID $update.UpdateID -AcceptAll -IgnoreReboot -ErrorAction Stop
+                } else {
+                    Install-WindowsUpdate -Title $update.Title -AcceptAll -IgnoreReboot -ErrorAction Stop
+                }
+
                 Write-Host "Successfully installed: $($update.Title)" -ForegroundColor $KeptLineColor
+
+                # Check if reboot is required
+                if ((Get-WURebootStatus).RebootRequired) {
+                    $rebootRequired = $true
+                }
+
             } catch {
                 Write-Host "Failed to install $($update.Title): $($_.Exception.Message)" -ForegroundColor $WarningColor
             }
         }
     }
 
-    # --- Chrome Installation/Update Check ---
-    Write-Host "`n--- Checking Google Chrome ---" -ForegroundColor $HeaderColor
+    # --- Remove Internet Explorer ---
+    Write-Host "`n--- Checking for Internet Explorer ---" -ForegroundColor $HeaderColor
 
-    $chromePaths = @(
-        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-        "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
-    )
-    $chromeInstalled = $chromePaths | Where-Object { Test-Path $_ }
-
-    if (-not $chromeInstalled) {
-        Write-Host "Google Chrome is not installed. Installing now..." -ForegroundColor $PromptColor
-        $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-        $tempInstaller = "$env:TEMP\chrome_installer.exe"
-
-        try {
-            Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
-            Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
-            Write-Host "Google Chrome has been installed." -ForegroundColor $KeptLineColor
-        } catch {
-            Write-Host "Failed to install Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-        } finally {
-            if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
+    try {
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "Internet-Explorer-Optional-amd64" }
+        if ($ieFeature -and $ieFeature.State -eq "Enabled") {
+            Write-Host "Internet Explorer is installed. Removing now..." -ForegroundColor $PromptColor
+            Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart
+            Write-Host "Internet Explorer has been removed successfully." -ForegroundColor $RemovedLineColor
+            $rebootRequired = $true
+        } else {
+            Write-Host "Internet Explorer is not installed." -ForegroundColor $KeptLineColor
         }
-    } else {
-        Write-Host "Google Chrome is already installed. Checking for updates..." -ForegroundColor $PromptColor
-
-# Attempt to run Chrome's updater
-$chromeUpdater = "$env:ProgramFiles\Google\Update\GoogleUpdate.exe"
-if (-not (Test-Path $chromeUpdater)) {
-    $chromeUpdater = "$env:ProgramFiles(x86)\Google\Update\GoogleUpdate.exe"
-}
-
-if (Test-Path $chromeUpdater) {
-    try {
-        Start-Process -FilePath $chromeUpdater -ArgumentList "/ua /installsource scheduler" -Wait
-        Write-Host "Chrome update process triggered." -ForegroundColor $KeptLineColor
     } catch {
-        Write-Host "Failed to run Chrome updater: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "Failed to check or remove Internet Explorer: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
-} else {
-    Write-Host "Chrome updater not found. Reinstalling Chrome to restore update functionality..." -ForegroundColor $WarningColor
 
-    $chromeInstallerUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-    $tempInstaller = "$env:TEMP\chrome_installer.exe"
-
-    try {
-        Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $tempInstaller -ErrorAction Stop
-        Start-Process -FilePath $tempInstaller -Args "/silent /install" -Wait
-        Write-Host "Chrome reinstalled successfully. Updater should now be restored." -ForegroundColor $KeptLineColor
-    } catch {
-        Write-Host "Failed to reinstall Chrome: $($_.Exception.Message)" -ForegroundColor $WarningColor
-    } finally {
-        if (Test-Path $tempInstaller) { Remove-Item $tempInstaller -Force }
-    }
-}
+    # Prompt for reboot if needed
+    if ($rebootRequired) {
+        Write-Host "`nOne or more updates require a system restart." -ForegroundColor $WarningColor
+        $rebootAnswer = Read-Host "Do you want to reboot now? [Y/n] (default Y)"
+        if ($rebootAnswer -eq 'n' -or $rebootAnswer -eq 'N') {
+            Write-Host "System reboot skipped. Please remember to restart manually." -ForegroundColor $PromptColor
+        } else {
+            Write-Host "Rebooting system now..." -ForegroundColor $HeaderColor
+            Restart-Computer -Force
+        }
     }
 
     Write-Host "`n--- Enable Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-function User-Auditing {
+function AuditUsers {
     Write-Host "`n--- Starting: User Auditing ---`n" -ForegroundColor $HeaderColor
 
     # Disable and rename the built-in Guest account
@@ -324,22 +320,22 @@ function User-Auditing {
                 Write-Host "Failed to delete user: $($user.Name) - $_" -ForegroundColor $WarningColor
             }
         } else {
-            Write-Host "Kept user: $($user.Name)" -ForegroundColor $KeptLineColor
+            try {
+                Unlock-LocalUser -Name $user.Name
+                Write-Host "Unlocked user: $($user.Name)" -ForegroundColor $KeptLineColor
+            } catch {
+                Write-Host "Kept user: $($user.Name) (could not unlock or already unlocked)" -ForegroundColor $KeptLineColor
+            }
         }
     }
 
     # After all users have been processed, enumerate all users in the Administrators group
     $adminGroup = Get-LocalGroupMember -Group "Administrators"
-
     foreach ($admin in $adminGroup) {
         # Only process user accounts (not groups or service accounts) 
-        if ($admin.ObjectClass -ne 'User') {
-            continue
-        }
-
+        if ($admin.ObjectClass -ne 'User') { continue }
         Write-Host "Is '$($admin.Name)' an Authorized Administrator? [Y/n]:" -ForegroundColor $PromptColor
         $answer = Read-Host
-
         if ($answer -eq 'n' -or $answer -eq 'N') {
             try {
                 Remove-LocalGroupMember -Group "Administrators" -Member $admin.Name
@@ -351,57 +347,142 @@ function User-Auditing {
             Write-Host "Kept administrator: $($admin.Name)" -ForegroundColor $KeptLineColor
         }
     }
+
     # === Prompt to add new users ===
-do {
-    Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
-    $addUserAnswer = Read-Host
-
-    if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
-        $newUsername = Read-Host "Enter the new username"
-        $newFullName = Read-Host "Enter the user's full name (can be blank)"
-
-        try {
-            # Create new local user
-            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-            New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
-            Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
-
-            # Force password change at next login
-            net user $newUsername /logonpasswordchg:yes
-            Write-Host "User '$newUsername' must change password at next logon." -ForegroundColor $KeptLineColor
-
-            # Ask to add to Administrators group
-            $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
-            if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
-                Add-LocalGroupMember -Group "Administrators" -Member $newUsername
-                Write-Host "User '$newUsername' added to Administrators group." -ForegroundColor $KeptLineColor
-            } else {
-                Write-Host "User '$newUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
+    do {
+        Write-Host "`nWould you like to add a new user? [Y/n] (default N)" -ForegroundColor $PromptColor
+        $addUserAnswer = Read-Host
+        if ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y') {
+            $newUsername = Read-Host "Enter the new username"
+            $newFullName = Read-Host "Enter the user's full name (can be blank)"
+            try {
+                # Create new local user
+                $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+                New-LocalUser -Name $newUsername -Password $securePassword -FullName $newFullName
+                # Apply additional settings after user creation
+                net user $newUsername /passwordchg:yes
+                net user $newUsername /expires:never
+                Write-Host "User '$newUsername' created successfully with temporary password." -ForegroundColor $EmphasizedNameColor
+                # Force password change at next login
+                net user $newUsername /logonpasswordchg:yes
+                # Ask to add to Administrators group
+                $adminAnswer = Read-Host "Add '$newUsername' to Administrators group? [y/N]"
+                if ($adminAnswer -eq 'y' -or $adminAnswer -eq 'Y') {
+                    Add-LocalGroupMember -Group "Administrators" -Member $newUsername
+                    Write-Host "User '$newAdminUsername' added to Administrators group." -ForegroundColor $KeptLineColor
+                } else {
+                    Write-Host "User '$newAdminUsername' was not added to Administrators group." -ForegroundColor $KeptLineColor
+                }
+            } catch {
+                Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
             }
+        }
+    } while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
+
+    # === Prompt to add a new Administrator account separately ===
+    Write-Host "`nWould you like to add a new Administrator account? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $addAdminAnswer = Read-Host
+    if ($addAdminAnswer -eq 'y' -or $addAdminAnswer -eq 'Y') {
+        $newAdminUsername = Read-Host "Enter the new administrator username"
+        $newAdminFullName = Read-Host "Enter the full name (can be blank)"
+        try {
+            $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
+            New-LocalUser -Name $newAdminUsername -Password $securePassword -FullName $newAdminFullName
+            # Apply additional settings after admin creation
+            net user $newAdminUsername /passwordchg:yes
+            net user $newAdminUsername /expires:never
+            Write-Host "Administrator account '$newAdminUsername' created successfully." -ForegroundColor $EmphasizedNameColor
+            net user $newAdminUsername /logonpasswordchg:yes
+            Add-LocalGroupMember -Group "Administrators" -Member $newAdminUsername
+            Write-Host "User '$newAdminUsername' added to Administrators group and must change password at next login." -ForegroundColor $KeptLineColor
         } catch {
-            Write-Host "Failed to create user: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to create administrator account: $($_.Exception.Message)" -ForegroundColor $WarningColor
         }
     }
-} while ($addUserAnswer -eq 'y' -or $addUserAnswer -eq 'Y')
 
-# === Prompt to add a new Administrator account separately ===
-Write-Host "`nWould you like to add a new Administrator account? [Y/n] (default N)" -ForegroundColor $PromptColor
-$addAdminAnswer = Read-Host
+    #===== Add Group =====
+    Write-Host "`nWould you like to add a new group? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $addGroupAnswer = Read-Host
+    if ($addGroupAnswer -eq 'y' -or $addGroupAnswer -eq 'Y') {
+        $newGroupName = Read-Host "Enter the new group name"
+        try {
+            New-LocalGroup -Name $newGroupName
+            Write-Host "Group '$newGroupName' created successfully." -ForegroundColor $EmphasizedNameColor
+            $addMembersAnswer = Read-Host "Would you like to add members to '$newGroupName'? [Y/n] (default N)"
+            if ($addMembersAnswer -eq 'y' -or $addMembersAnswer -eq 'Y') {
+                do {
+                    $memberName = Read-Host "Enter the username to add to '$newGroupName'"
+                    try {
+                        Add-LocalGroupMember -Group $newGroupName -Member $memberName
+                        Write-Host "User '$memberName' added to group '$newGroupName'." -ForegroundColor $KeptLineColor
+                    } catch {
+                        Write-Host "Failed to add user to group: $($_.Exception.Message)" -ForegroundColor $WarningColor
+                    }
+                    $moreMembers = Read-Host "Add another member? [Y/n] (default N)"
+                } while ($moreMembers -eq 'y' -or $moreMembers -eq 'Y')
+            }
+        } catch {
+            Write-Host "Failed to create group: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        }
+    } else {
+        Write-Host "No new group created." -ForegroundColor $KeptLineColor
+    }
+    Write-Host "Would you like to delete an existing group? [Y/n] (default N)" -ForegroundColor $PromptColor
+    $deleteGroupAnswer = Read-Host
+    if ($deleteGroupAnswer -eq 'y' -or $deleteGroupAnswer -eq 'Y') {
+        do {
+            $groupNameToDelete = Read-Host "Enter the group name to delete"
+            try {
+                Remove-LocalGroup -Name $groupNameToDelete
+                Write-Host "Group '$groupNameToDelete' deleted successfully." -ForegroundColor $EmphasizedNameColor
+            } catch {
+                Write-Host "Failed to delete group: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            }
+            $moreGroupsToDelete = Read-Host "Delete another group? [Y/n] (default N)"
+        } while ($moreGroupsToDelete -eq 'y' -or $moreGroupsToDelete -eq 'Y')
+    } else {
+        Write-Host "No groups deleted." -ForegroundColor $KeptLineColor
+    }
 
-if ($addAdminAnswer -eq 'y' -or $addAdminAnswer -eq 'Y') {
-    $newAdminUsername = Read-Host "Enter the new administrator username"
-    $newAdminFullName = Read-Host "Enter the full name (can be blank)"
+    foreach ($user in $localUsers) {
+    # Skip built-in accounts
+    if ($user.Name -in @('Administrator', 'DefaultAccount', 'Guest', 'WDAGUtilityAccount')) {
+        continue
+    }
 
+    Write-Host -NoNewline "Is " -ForegroundColor $EmphasizedNameColor
+    Write-Host -NoNewline "$($user.Name)" -ForegroundColor $PromptColor
+    Write-Host -NoNewline " an Authorized User? [Y/n] (default Y) " -ForegroundColor $EmphasizedNameColor
+
+    $answer = Read-Host
     try {
-        $securePassword = ConvertTo-SecureString $TempPassword -AsPlainText -Force
-        New-LocalUser -Name $newAdminUsername -Password $securePassword -FullName $newAdminFullName -UserMayNotChangePassword $false -PasswordNeverExpires $false
-        Write-Host "Administrator account '$newAdminUsername' created successfully." -ForegroundColor $EmphasizedNameColor
+        # Reset password to temporary one
+        Set-LocalUser -Name $user.Name -Password (ConvertTo-SecureString $TempPassword -AsPlainText -Force)
+        Write-Host "Password for '$($user.Name)' reset to temporary value." -ForegroundColor $EmphasizedNameColor
 
-        net user $newAdminUsername /logonpasswordchg:yes
-        Add-LocalGroupMember -Group "Administrators" -Member $newAdminUsername
-        Write-Host "User '$newAdminUsername' added to Administrators group and must change password at next login." -ForegroundColor $KeptLineColor
+        # Require password change at next logon
+        net user $user.Name /logonpasswordchg:yes
+        Write-Host "User '$($user.Name)' must change password at next logon." -ForegroundColor $EmphasizedNameColor
     } catch {
-        Write-Host "Failed to create administrator account: $($_.Exception.Message)" -ForegroundColor $WarningColor
+        Write-Host "Failed to reset password for '$($user.Name)': $_" -ForegroundColor $WarningColor
+    }
+
+    if ($answer -eq 'n' -or $answer -eq 'N') {
+        try {
+            Remove-LocalUser -Name $user.Name
+            Write-Host "Deleted user: $($user.Name)" -ForegroundColor $RemovedLineColor
+        } catch {
+            Write-Host "Failed to delete user: $($user.Name) - $_" -ForegroundColor $WarningColor
+        }
+    } else {
+        try {
+            #Enable and unlock authorized users
+            Enable-LocalUser -Name $user.Name
+            Unlock-LocalUser -Name $user.Name
+            Write-Host "Enabled and unlocked user: $($user.Name)" -ForegroundColor $KeptLineColor
+        } catch {
+            Write-Host "Kept user: $($user.Name) (could not enable/unlock or already active)" -ForegroundColor $KeptLineColor
+        }
     }
 }
 
@@ -431,121 +512,165 @@ function Account-Policies {
         return
     }
 
+    # Set the minimum password age
+    Write-Host "Setting minimum password age to $MinPasswordAge day..." -ForegroundColor Yellow
+    try {
+        net accounts /MINPWAGE:$MinPasswordAge | Out-Null
+        Write-Host "Successfully set Minimum Password Age to $MinPasswordAge day." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Minimum Password Age: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Enforce password complexity
+    Write-Host "Enforcing password complexity requirements..." -ForegroundColor Yellow
+    try {
+        secedit /export /cfg temp.inf
+        (Get-Content temp.inf).replace("PasswordComplexity = 0", "PasswordComplexity = 1") | Set-Content temp_modified.inf
+        secedit /configure /db secedit.sdb /cfg temp_modified.inf /areas SECURITYPOLICY | Out-Null
+        Remove-Item temp.inf, temp_modified.inf -Force
+        Write-Host "Password complexity enforced successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to enforce password complexity: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Disable reversible encryption
+    Write-Host "Disabling reversible encryption for passwords..." -ForegroundColor Yellow
+    try {
+        reg add "HKLM\System\CurrentControlSet\Control\Lsa" /v "StoreClearText" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Host "Reversible encryption disabled successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to disable reversible encryption: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Set account lockout threshold
+    Write-Host "Setting account lockout threshold to 5 attempts..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTTHRESHOLD:$LockoutThreshold | Out-Null
+        Write-Host "Successfully set Account Lockout Threshold to $LockoutThreshold attempts." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Threshold: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Set lockout observation window
+    Write-Host "Setting account lockout observation window to $LockoutWindow minutes..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTWINDOW:$LockoutWindow | Out-Null
+        Write-Host "Successfully set Account Lockout Observation Window to $LockoutWindow minutes." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Observation Window: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Set account lockout duration
+    Write-Host "Setting account lockout duration to $LockoutDuration minutes..." -ForegroundColor Yellow
+    try {
+        net accounts /LOCKOUTDURATION:$LockoutDuration | Out-Null
+        Write-Host "Successfully set Account Lockout Duration to $LockoutDuration minutes." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set Account Lockout Duration: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+# Apply the new setting
+secedit /export /cfg C:\temp\secpol.cfg
+
+# Read the exported security policy
+(Get-Content C:\temp\secpol.cfg) |
+ForEach-Object {
+    if ($_ -match "^PasswordHistorySize") {
+        "PasswordHistorySize = $passwordhistorySize"
+    }
+    else {
+        $_
+    }
+} | Set-Content C:\temp\secpol.cfg
+
+# Import the updated policy
+secedit /configure /db C:\Windows\Security\Local.sdb /cfg C:\temp\secpol.cfg /areas SECURITYPOLICY
+
+# Cleanup
+Remove-Item C:\temp\secpol.cfg -Force
+
+Write-Host "Password history length successfully set to $passwordhistorysize."
+
     Write-Host "`n--- Finished: Setting Account Policies ---`n" -ForegroundColor Cyan
 }
 
-
 function Local-Policies {
-    Write-Host "`n--- Local Policies ---`n"
+    Write-Host "`n--- Applying Local Policies ---`n" -ForegroundColor Cyan
 
-    do {
-        Write-Host "Choose a setting to configure:"
-        Write-Host "1. Enable Audit Logon [Failure]"
-        Write-Host "2. Restrict SeTakeOwnershipPrivilege (Admins only)"
-        Write-Host "3. CTRL+ALT+DEL Requirement (Enable/Disable)"
-        Write-Host "4. Back to Main Menu"
+    # Enable Audit Logon [Success]
+    Write-Host "Enabling Audit Logon [Success]..." -ForegroundColor Cyan
+    auditpol /set /subcategory:"Logon" /success:enable
+    Write-Host "Audit Logon [Success] enabled." -ForegroundColor Green
 
-        $choice = Read-Host "Enter your choice"
+    # Enable Audit Logoff [Failure]
+    Write-Host "Enabling Audit Logoff [Failure]..." -ForegroundColor Cyan
+    auditpol /set /subcategory:"Logoff" /failure:enable
+    Write-Host "Audit Logoff [Failure] enabled." -ForegroundColor Green
 
-        switch ($choice) {
-            '1' {
-                Write-Host "Enabling Audit Logon [Failure]..." -ForegroundColor Cyan
-                auditpol /set /subcategory:"Logon" /failure:enable
-                Write-Host "Audit policy updated." -ForegroundColor Green
-            }
+    # Restrict network access for Everyone group
+    Write-Host "Restricting network access for Everyone group..." -ForegroundColor Cyan
+    secedit /export /cfg $env:TEMP\secpol.inf
+    (Get-Content $env:TEMP\secpol.inf).replace("SeNetworkLogonRight = *S-1-1-0", "SeNetworkLogonRight =") | Set-Content $env:TEMP\secpol_modified.inf
+    secedit /configure /db secedit.sdb /cfg $env:TEMP\secpol_modified.inf /areas USER_RIGHTS
+    Write-Host "Network access restricted for Everyone group." -ForegroundColor Green
 
-            '2' {
-                Write-Host "Restricting SeTakeOwnershipPrivilege to Administrators..." -ForegroundColor Cyan
+    # Prevent users from installing printer drivers
+    Write-Host "Preventing users from installing printer drivers..." -ForegroundColor Cyan
+    reg add "HKLM\Software\Policies\Microsoft\Windows NT\Printers" /v "PointAndPrintRestrictions" /t REG_DWORD /d 1 /f | Out-Null
+    reg add "HKLM\Software\Policies\Microsoft\Windows NT\Printers" /v "NoWarningNoElevationOnInstall" /t REG_DWORD /d 0 /f | Out-Null
+    reg add "HKLM\Software\Policies\Microsoft\Windows NT\Printers" /v "UpdatePromptSettings" /t REG_DWORD /d 2 /f | Out-Null
+    Write-Host "Users are now prevented from installing printer drivers." -ForegroundColor Green
 
-                $exportedFile = "$env:TEMP\secpol.inf"
-                $modifiedFile = "$env:TEMP\secpol_modified.inf"
+    # Enforce CTRL+ALT+DEL requirement
+    Write-Host "Enforcing CTRL+ALT+DEL requirement..." -ForegroundColor Cyan
+    reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v "DisableCAD" /t REG_DWORD /d 0 /f
+    Write-Host "CTRL+ALT+DEL requirement enforced." -ForegroundColor Green
 
-                secedit /export /cfg $exportedFile /areas USER_RIGHTS
+    # Enable Microsoft network client: Digitally sign communications (always)
+    Write-Host "Enabling Microsoft network client: Digitally sign communications (always)..." -ForegroundColor Cyan
+    reg add "HKLM\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v "RequireSecuritySignature" /t REG_DWORD /d 1 /f
+    Write-Host "Microsoft network client: Digitally sign communications (always) enabled." -ForegroundColor Green
 
-                if (-not (Test-Path $exportedFile)) {
-                    Write-Host "Failed to export security policy." -ForegroundColor Red
-                    break
-                }
+    # Switch to the secure desktop when prompting for elevation
+    Write-Host "Switching to the secure desktop when prompting for elevation..." -ForegroundColor Cyan
+    reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v "PromptOnSecureDesktop" /t REG_DWORD /d 1 /f
+    Write-Host "Secure desktop for elevation prompts enabled." -ForegroundColor Green
 
-                $content = Get-Content $exportedFile
-                $content = $content -replace '^SeTakeOwnershipPrivilege\s*=.*$', 'SeTakeOwnershipPrivilege = *S-1-5-32-544'
-                $content | Set-Content $modifiedFile -Encoding ASCII
-
-                secedit /configure /db secedit.sdb /cfg $modifiedFile /areas USER_RIGHTS /overwrite
-
-                Write-Host "Privilege updated successfully." -ForegroundColor Green
-            }
-
-            '3' {
-                Write-Host "`nCTRL+ALT+DEL Secure Attention Requirement" -ForegroundColor Cyan
-                Write-Host "1. Enable (require CTRL+ALT+DEL)"
-                Write-Host "2. Disable (do not require it)"
-                $ctrlChoice = Read-Host "Enter your choice"
-
-                $regPath = "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System"
-                $regName = "DisableCAD"
-
-                switch ($ctrlChoice) {
-                    '1' {
-                        Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Force
-                        Write-Host "CTRL+ALT+DEL is now required at login." -ForegroundColor Green
-                    }
-                    '2' {
-                        Set-ItemProperty -Path $regPath -Name $regName -Value 1 -Force
-                        Write-Host "CTRL+ALT+DEL is no longer required at login." -ForegroundColor Yellow
-                    }
-                    default {
-                        Write-Host "Invalid choice." -ForegroundColor Red
-                    }
-                }
-            }
-
-            '4' {
-                Write-Host "Returning to main menu..."
-            }
-
-            default {
-                Write-Host "Invalid option. Try again." -ForegroundColor Red
-            }
-        }
-
-    } while ($choice -ne '4')
-    Write-Host "`n--- Local Policies Completed ---`n"
+    Write-Host "`n--- Start Device Policy ---" -ForegroundColor Cyan
+    Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers" -Name "AddPrinterDrivers" -Value 1
+    Write-Host "`n--- Local Policies Applied ---`n" -ForegroundColor Cyan
 }
 
-function Defensive-Countermeasures {
-    Write-Host "`n🔧 Enabling Windows Defender Real-Time Protection..." -ForegroundColor Cyan
+function EnableDefensiveCountermeasures {
+    Write-Host "`n--- Starting: Defensive Countermeasures ---`n" -ForegroundColor $HeaderColor
 
-    # Try to remove Group Policy block (optional)
-    try {
-        $keyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
-        if (Test-Path $keyPath) {
-            Remove-Item -Path $keyPath -Recurse -Force
-            Write-Host "✅ Removed Group Policy override." -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "⚠️ Could not remove policy key (may require Tamper Protection OFF)." -ForegroundColor Yellow
-    }
-
-    # Attempt to enable Real-Time Monitoring
+    # Example: Enable Windows Defender
+    Write-Host "Enabling Windows Defender..." -ForegroundColor $PromptColor
     try {
         Set-MpPreference -DisableRealtimeMonitoring $false
-        Write-Host "✅ Real-time monitoring requested." -ForegroundColor Green
+        Write-Host "Windows Defender enabled successfully." -ForegroundColor $KeptLineColor
     } catch {
-        Write-Host "❌ Failed to enable Real-Time Protection: $_" -ForegroundColor Red
+        Write-Host "Failed to enable Windows Defender: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 
-    # Final status check
-    $status = Get-MpComputerStatus
-    if ($status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) {
-        Write-Host "🟢 Defender Real-Time Protection is ENABLED." -ForegroundColor Green
-    } else {
-        Write-Host "🔴 Defender Real-Time Protection is NOT enabled." -ForegroundColor Red
+    # Example: Configure firewall settings
+    Write-Host "Configuring Windows Firewall..." -ForegroundColor $PromptColor
+    try {
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+        Write-Host "Windows Firewall configured successfully." -ForegroundColor $KeptLineColor
+    } catch {
+        Write-Host "Failed to configure Windows Firewall: $($_.Exception.Message)" -ForegroundColor $WarningColor
     }
 
-    Write-Host "`n--- Defensive Countermeasures Completed ---`n" -ForegroundColor Cyan
+    Write-Host "`n--- Defensive Countermeasures process completed ---`n" -ForegroundColor $HeaderColor
 }
-function Uncategorized-OS-Settings {
+
+function UncategorizedOSSettings {
     Write-Host "`n--- Starting: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 
     try {
@@ -560,13 +685,30 @@ function Uncategorized-OS-Settings {
         # Verify
         $raStatus = (Get-ItemProperty -Path $raKey -Name fAllowToGetHelp).fAllowToGetHelp
         if ($raStatus -eq 0) {
-            Write-Host "✅ Remote Assistance is disabled." -ForegroundColor Green
+            Write-Host " Remote Assistance is disabled." -ForegroundColor Green
         } else {
-            Write-Host "⚠️ Failed to disable Remote Assistance." -ForegroundColor Red
+            Write-Host " Failed to disable Remote Assistance." -ForegroundColor Red
         }
     } catch {
         Write-Host "Error modifying Remote Assistance settings: $_" -ForegroundColor Red
     }
+
+Write-Host "Disabling AutoRun for all users..." -ForegroundColor Yellow
+
+# Registry path
+$regPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+
+# Create the registry key if it doesn't exist
+If (!(Test-Path $regPath)) {
+    New-Item -Path $regPath -Force | Out-Null
+}
+
+Set-ItemProperty -Path $regPath -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord
+
+# Optional: Also disable AutoPlay (optional, but often combined)
+Set-ItemProperty -Path $regPath -Name "NoAutoRun" -Value 1 -Type DWord
+
+Write-Host "AutoRun has been disabled for all users." -ForegroundColor Green
 
     Write-Host "`n--- Completed: Uncategorized OS Settings ---`n" -ForegroundColor Cyan
 }
@@ -637,194 +779,385 @@ function OS-Updates {
         UsoClient StartInstall
         Add-Content -Path $logFile -Value "$(Get-Date) - Updates triggered with UsoClient."
         Write-Host "Updates triggered successfully. Log saved to: $logFile" -ForegroundColor $EmphasizedNameColor
-        
-        # Since this is a standalone workstation, reboot automatically
-        Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
-        shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
-        Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
+
+        # Wait for updates to complete installation
+        Write-Host "Waiting for updates to complete installation..." -ForegroundColor Yellow
+        $updatesInProgress = $true
+        while ($updatesInProgress) {
+            Start-Sleep -Seconds 30
+            $updateStatus = UsoClient ScanInstallWait
+            if ($updateStatus -notmatch "Updates in progress") {
+                $updatesInProgress = $false
+            }
+        }
+        Write-Host "Updates installed successfully." -ForegroundColor Green
+
+        # Prompt for reboot
+        $rebootAnswer = Read-Host "Updates completed. Do you want to reboot now? [Y/n] (default Y)"
+        if ($rebootAnswer -eq 'n' -or $rebootAnswer -eq 'N') {
+            Write-Host "System reboot skipped. Please remember to restart manually." -ForegroundColor $PromptColor
+        } else {
+            Write-Host "Rebooting system in 15 seconds to complete updates..." -ForegroundColor $WarningColor
+            shutdown.exe /r /t 15 /c "Rebooting to finish Windows Updates"
+            Write-Host "You can cancel reboot with 'shutdown.exe /a' if needed." -ForegroundColor $PromptColor
+        }
     } catch {
         Write-Host "UsoClient failed: $($_.Exception.Message)" -ForegroundColor $WarningColor
         Add-Content -Path $logFile -Value "$(Get-Date) - Failed to trigger updates: $($_.Exception.Message)"
     }
 
+   Write-Host "`n--- Enabling Updates for Other Microsoft Products ---`n" -ForegroundColor Cyan
+
+    try {
+        # Enable Microsoft Update
+        reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "AllowMUUpdateService" /t REG_DWORD /d 1 /f
+        Write-Host "Updates for other Microsoft products have been enabled." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to enable updates for other Microsoft products: $_" -ForegroundColor Red
+    }
+
     Write-Host "`n--- OS Updates process completed ---`n" -ForegroundColor $HeaderColor
 }
 
-#gdsvgglololol
 function Application-Updates {
-    Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
+Write-Host "`n--- Starting: Application Updates ---`n" -ForegroundColor Cyan
 
-    # Check if winget is installed
-    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget not found. Attempting to install via Chocolatey..." -ForegroundColor Yellow
 
-        # Install Chocolatey if not present
-        if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
+# Ensure Winget Installed or Available
+if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host "Winget not found. Attempting installation..." -ForegroundColor Yellow
+
+    $osVersion = [System.Environment]::OSVersion.Version
+    if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 16299)) {
+        Write-Host "Winget not supported on this OS version. Skipping installation." -ForegroundColor Red
+    } else {
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
-            Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
         }
 
-        # Install winget via Chocolatey
-        choco install winget -y
-        refreshenv
-    }
-
-    # Refresh environment in case winget was just installed
-    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
-
-    # Confirm winget is now available
-    if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget installation failed or still unavailable." -ForegroundColor Red
-        return
-    }
-
-    try {
-        # Fetch list of updatable apps
-        $updates = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" -and $_ -notmatch "Failed when searching source" }
-
-        if (-not $updates) {
-            Write-Host "No application updates available." -ForegroundColor Green
-        } else {
-            Write-Host "`nThe following applications have updates:`n" -ForegroundColor Cyan
-            winget upgrade
-
-            foreach ($app in $updates) {
-                # Extract app ID (skip headers, match proper entries)
-                if ($app -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
-                    $id = $matches[1].Trim()
-                    $version = $matches[2].Trim()
-                    $available = $matches[3].Trim()
-
-                    Write-Host "`nUpdate available for: $id (Current: $version, New: $available)" -ForegroundColor Yellow
-                    $choice = Read-Host "Do you want to update $id? [Y/n]"
-
-                    if ($choice -eq 'n' -or $choice -eq 'N') {
-                        Write-Host "Skipped: $id" -ForegroundColor DarkYellow
-                    } else {
-                        try {
-                            winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
-                            Write-Host "Updated: $id" -ForegroundColor Green
-                        } catch {
-                            Write-Host "Failed to update $id : $_" -ForegroundColor Red
-                        }
-                    }
-                }
-            }
-        }
-
-        # 🔽 Reinstall Google Chrome after updates are finished
-        Write-Host "`n--- Reinstalling Google Chrome ---`n" -ForegroundColor Cyan
         try {
-            $chrome = winget list --id Google.Chrome -e -ErrorAction SilentlyContinue
-            if ($chrome) {
-                Write-Host "Uninstalling existing Google Chrome..." -ForegroundColor Yellow
-                winget uninstall --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
-                Start-Sleep -Seconds 5
-            } else {
-                Write-Host "Google Chrome is not currently installed." -ForegroundColor DarkYellow
+            choco install winget -y
+            refreshenv
+        } catch {
+            Write-Warning "Chocolatey installation of winget failed: $_"
+        }
+
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+                Write-Host "Installing Scoop..." -ForegroundColor Cyan
+                Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+                iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
             }
 
-            Write-Host "Installing Google Chrome..." -ForegroundColor Yellow
-            winget install --id Google.Chrome -e --accept-package-agreements --accept-source-agreements
-            Write-Host "Google Chrome has been successfully reinstalled." -ForegroundColor Green
+            try {
+                scoop install winget
+            } catch {
+                Write-Warning "Scoop installation of winget failed: $_"
+            }
         }
-        catch {
-            Write-Host "Error reinstalling Google Chrome: $_" -ForegroundColor Red
-        }
-
-    } catch {
-        Write-Host "Error while checking or updating applications: $_" -ForegroundColor Red
     }
 }
 
+# Refresh PATH just in case
+$env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
 
-function Prohibited-Files {
-    param (
-        [string[]]$PathsToCheck = @("C:\Users"),
-        [string[]]$ProhibitedPatterns = @("*.exe", "*.bat", "*.cmd", "*.scr", "users.txt")
-    )
+Write-Host "`n--- Detecting Installed Applications ---`n" -ForegroundColor Cyan
 
-    Write-Host "Starting scan for prohibited files..." -ForegroundColor Cyan
+# Attempt to detect installed apps
+$installedApps = @()
+try {
+    $installedApps = winget list | Where-Object { $_ -and $_ -notmatch "No installed package" }
+} catch {
+    Write-Warning "Unable to retrieve installed apps via winget."
+}
 
-    foreach ($path in $PathsToCheck) {
-        foreach ($pattern in $ProhibitedPatterns) {
-            try {
-                $foundFiles = Get-ChildItem -Path $path -Filter $pattern -Recurse -ErrorAction SilentlyContinue
-                if ($foundFiles) {
-                    Write-Host "Prohibited files found matching pattern '$pattern' in '$path':" -ForegroundColor Red
-                    foreach ($file in $foundFiles) {
-                        Write-Host $file.FullName -ForegroundColor Yellow
+if (-not $installedApps) {
+    Write-Host "No applications detected with Winget. Trying Chocolatey..." -ForegroundColor Yellow
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        $installedApps = choco list --localonly
+    } elseif (Get-Command scoop -ErrorAction SilentlyContinue) {
+        $installedApps = scoop list
+    }
+}
 
-                        if ($file.Name -ieq "users.txt") {
-                            # Always remove clear text password file without asking
-                            try {
-                                Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                Write-Host "🚫 Deleted prohibited clear text password file: $($file.FullName)" -ForegroundColor Green
-                            } catch {
-                                Write-Warning "Failed to delete $($file.FullName): $_"
-                            }
-                        } else {
-                            # Ask for confirmation before removing other prohibited files
-                            $response = Read-Host "Do you want to delete this file? (Y/N)"
-                            if ($response -match '^[Yy]$') {
-                                try {
-                                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                                    Write-Host "Deleted: $($file.FullName)" -ForegroundColor Green
-                                } catch {
-                                    Write-Warning "Failed to delete $($file.FullName): $_"
-                                }
-                            } else {
-                                Write-Host "Skipped: $($file.FullName)" -ForegroundColor Cyan
-                            }
-                        }
-                    }
-                } else {
-                    Write-Host "No prohibited files matching '$pattern' found in '$path'." -ForegroundColor Green
+if (-not $installedApps) {
+    Write-Warning "No installed applications could be detected."
+    return
+}
+
+# Common browsers to check
+$browsers = @("Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera", "Vivaldi")
+
+Write-Host "`n--- Checking for Application Updates ---`n" -ForegroundColor Cyan
+
+# Winget first
+$updatesAvailable = winget upgrade | Where-Object { $_ -and $_ -notmatch "No installed package found" }
+
+if (-not $updatesAvailable) {
+    Write-Host "No application updates available via Winget." -ForegroundColor Green
+} else {
+    $updatesAvailable | ForEach-Object {
+        if ($_ -match '^\s*(.*?)\s{2,}(.*?)\s{2,}(.*?)\s{2,}(.*?)\s*$') {
+            $appName = $matches[1].Trim()
+            $current = $matches[2].Trim()
+            $latest = $matches[3].Trim()
+            $id = $matches[4].Trim()
+
+            $isBrowser = $false
+            foreach ($browser in $browsers) {
+                if ($appName -like "*$browser*") { $isBrowser = $true }
+            }
+
+            $color = if ($isBrowser) { "Magenta" } else { "Yellow" }
+            Write-Host "`nUpdate available for: $appName (Current: $current, New: $latest)" -ForegroundColor $color
+            $choice = Read-Host "Update this app? [Y/n]"
+
+            if ($choice -eq 'n' -or $choice -eq 'N') {
+                Write-Host "Skipped: $appName" -ForegroundColor DarkYellow
+            } else {
+                try {
+                    winget upgrade --id "$id" --accept-package-agreements --accept-source-agreements
+                    Write-Host " Updated: $appName" -ForegroundColor Green
+                } catch {
+                    Write-Warning "Failed to update ${appName}: $_"
                 }
-            } catch {
-                Write-Warning "Error scanning $path for pattern $pattern : $_"
             }
         }
     }
+}
 
-    Write-Host "Prohibited files scan completed." -ForegroundColor Cyan
+# Fallback to Chocolatey if Winget didn’t update anything
+if ($updatesAvailable.Count -eq 0 -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+    try {
+        Write-Host "Attempting to update apps with Chocolatey..." -ForegroundColor Cyan
+        choco upgrade all -y
+    } catch {
+        Write-Warning "Chocolatey update process failed: $_"
+    }
+}
+
+# Fallback to Scoop if needed
+if ($updatesAvailable.Count -eq 0 -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+    try {
+        Write-Host "Attempting to update apps with Scoop..." -ForegroundColor Cyan
+        scoop update *
+    } catch {
+        Write-Warning "Scoop update process failed: $_"
+    }
+}
+
+# Ask about browser reinstalls
+foreach ($browser in $browsers) {
+    $choice = Read-Host "`nWould you like to reinstall $browser? [y/N]"
+    if ($choice -eq 'y' -or $choice -eq 'Y') {
+        try {
+            $pkg = winget list --name "$browser" | Select-String "$browser"
+            if ($pkg) {
+                Write-Host "Uninstalling $browser..." -ForegroundColor Yellow
+                winget uninstall --name "$browser" --accept-package-agreements --accept-source-agreements
+                Start-Sleep -Seconds 5
+            }
+            Write-Host "Installing $browser..." -ForegroundColor Cyan
+            winget install --name "$browser" --accept-package-agreements --accept-source-agreements
+            Write-Host "$browser successfully reinstalled." -ForegroundColor Green
+        } catch {
+            Write-Warning "Error reinstalling ${browser}: $_"
+        }
+    }
+}
+
+Write-Host "`n--- Application Update Process Completed ---`n" -ForegroundColor Cyan
+}
+function Prohibited-Files {
+$searchRoot = "C:\Users"
+$logFile = "C:\temp\PasswordFiles_AllUsers.log"
+$keywords = "password","pwd","secret","token"
+$extensions = "*.txt","*.log","*.config","*.json","*.env","*.xml","*.ps1","*.bat"
+
+# Ensure log folder exists
+if (-not (Test-Path "C:\temp")) { New-Item -Path "C:\temp" -ItemType Directory }
+
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+Write-Host "Scanning all user folders in $searchRoot..." -ForegroundColor Cyan
+
+# Get all user folders
+$users = Get-ChildItem -Path $searchRoot -Directory -ErrorAction SilentlyContinue
+
+foreach ($user in $users) {
+    Write-Host "`nChecking user: $($user.Name)" -ForegroundColor Green
+    try {
+        Get-ChildItem -Path $user.FullName -Recurse -Include $extensions -File -ErrorAction SilentlyContinue | 
+        ForEach-Object {
+            $file = $_.FullName
+            try {
+                $content = Get-Content $file -ErrorAction SilentlyContinue
+                foreach ($keyword in $keywords) {
+                    if ($content -match $keyword) {
+                        Write-Host "Possible password found in: $file" -ForegroundColor Yellow
+                        Add-Content -Path $logFile -Value "Possible password in file: $file"
+                        
+                        # Prompt to delete or skip
+                        $choice = Read-Host "Delete this file? (Y/N)"
+                        if ($choice -match '^[Yy]$') {
+                            Remove-Item -Path $file -Force
+                            Write-Host "Deleted: $file" -ForegroundColor Red
+                        } else {
+                            Write-Host "Skipped: $file" -ForegroundColor Gray
+                        }
+
+                        break # Stop checking other keywords in the same file
+                    }
+                }
+            } catch { Write-Host "Cannot read file: $file" -ForegroundColor DarkRed }
+        }
+    } catch { Write-Host "Cannot access folder: $($user.FullName)" -ForegroundColor DarkRed }
+}
+# Configuration
+$logFile = "C:\Temp\DisableHiddenShares.log"
+
+# Ensure log folder exists
+if (-not (Test-Path "C:\Temp")) { New-Item -Path "C:\Temp" -ItemType Directory -Force }
+
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+# Remove existing hidden/admin shares
+$hiddenShares = Get-SmbShare | Where-Object { $_.Name -like "*$" }
+foreach ($share in $hiddenShares) {
+    try {
+        Remove-SmbShare -Name $share.Name -Force
+        Add-Content -Path $logFile -Value "Removed share: $($share.Name)"
+    } catch {
+        Add-Content -Path $logFile -Value "Failed to remove share: $($share.Name)"
+    }
+}
+
+# Disable automatic admin shares
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+try {
+    New-ItemProperty -Path $regPath -Name "AutoShareServer" -PropertyType DWORD -Value 0 -Force
+    Add-Content -Path $logFile -Value "Set AutoShareServer = 0"
+} catch {
+    Add-Content -Path $logFile -Value "Failed to set AutoShareServer = 0"
+}
+
+# Restart Server service
+try {
+    Restart-Service -Name "LanmanServer"
+    Add-Content -Path $logFile -Value "Server service restarted"
+} catch {
+    Add-Content -Path $logFile -Value "Failed to restart Server service"
+}
+
+# Verify hidden/admin shares
+$hiddenSharesAfter = Get-SmbShare | Where-Object { $_.Name -like "*$" }
+if ($hiddenSharesAfter.Count -eq 0) {
+    Add-Content -Path $logFile -Value "All hidden/admin shares removed"
+} else {
+    Add-Content -Path $logFile -Value "Some hidden/admin shares remain: $($hiddenSharesAfter.Name -join ', ')"
+}
+
+Write-Host "`nScan complete. Check $logFile for full list of potential password files." -ForegroundColor Cyan
+
+    Write-Host "`n=== Prohibited files scan completed ===`n" -ForegroundColor Cyan
 }
 
 
 function Unwanted-Software {
-    Write-Host "`n--- Starting: Unwanted Software ---`n" -ForegroundColor $HeaderColor
+    Write-Host "`n--- Starting: Unwanted Software Cleanup ---`n" -ForegroundColor Cyan
 
     # --- Uninstall Angry IP Scanner ---
     $angryIPPath = "C:\Program Files\Angry IP Scanner\uninstall.exe"
     if (Test-Path $angryIPPath) {
-        Write-Host "Uninstalling Angry IP Scanner..." -ForegroundColor $PromptColor
+        Write-Host "Uninstalling Angry IP Scanner..." -ForegroundColor Yellow
         try {
             Start-Process -FilePath $angryIPPath -ArgumentList "/S" -Wait -ErrorAction Stop
-            Write-Host "Angry IP Scanner uninstalled successfully." -ForegroundColor $EmphasizedNameColor
+            Write-Host "Angry IP Scanner uninstalled successfully." -ForegroundColor Green
         } catch {
-            Write-Host "Failed to uninstall Angry IP Scanner: $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to uninstall Angry IP Scanner: $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "Angry IP Scanner is not installed." -ForegroundColor $KeptLineColor
+        Write-Host "Angry IP Scanner is not installed." -ForegroundColor Gray
     }
 
     # --- Remove Everything FTP root files ---
     $everythingPath = "C:\inetpub\ftproot\Everything"
     if (Test-Path $everythingPath) {
-        Write-Host "Removing all files from $everythingPath..." -ForegroundColor $PromptColor
+        Write-Host "Removing all files from $everythingPath..." -ForegroundColor Yellow
         try {
             Get-ChildItem -Path $everythingPath -File -Recurse | Remove-Item -Force
-            Write-Host "All files removed from $everythingPath." -ForegroundColor $EmphasizedNameColor
+            Write-Host "All files removed from $everythingPath." -ForegroundColor Green
         } catch {
-            Write-Host "Failed to remove files from $everythingPath : $($_.Exception.Message)" -ForegroundColor $WarningColor
+            Write-Host "Failed to remove files from $everythingPath : $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "Folder $everythingPath does not exist." -ForegroundColor $KeptLineColor
+        Write-Host "Folder $everythingPath does not exist." -ForegroundColor Gray
     }
 
-    Write-Host "`n--- Unwanted Software process completed ---`n" -ForegroundColor $HeaderColor
+    # --- Remove Internet Explorer ---
+    Write-Host "`nChecking Internet Explorer status..." -ForegroundColor Yellow
+    $osVersion = (Get-CimInstance Win32_OperatingSystem).Version
+    Write-Host "Detected Windows version: $osVersion" -ForegroundColor Gray
+
+    $requiresReboot = $false
+
+    if ($osVersion -match '^10\.0') {
+        # Windows 10 / 11 family
+        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
+        if ($ieFeature) {
+            foreach ($feature in $ieFeature) {
+                if ($feature.State -eq "Enabled") {
+                    Write-Host "Disabling feature: $($feature.FeatureName)..." -ForegroundColor Yellow
+                    try {
+                        Disable-WindowsOptionalFeature -Online -FeatureName $feature.FeatureName -NoRestart -ErrorAction Stop
+                        Write-Host " $($feature.FeatureName) disabled successfully." -ForegroundColor Green
+                        $requiresReboot = $true
+                    } catch {
+                        Write-Host " Failed to disable $($feature.FeatureName): $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                } else {
+                    Write-Host " $($feature.FeatureName) already disabled." -ForegroundColor Gray
+                }
+            }
+        } else {
+            Write-Host "No Internet Explorer features found (Windows 11 or already removed)." -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "Non-Windows 10/11 system detected. Manual removal of INTEXP may be required." -ForegroundColor Gray
+    }
+
+    # --- Optional reboot if feature was removed ---
+    if ($requiresReboot) {
+        Write-Host "`nSystem will reboot in 10 seconds to complete INTEXP removal..." -ForegroundColor Red
+        shutdown.exe /r /t 10 /c "Rebooting to finish removing Internet Explorer"
+    } else {
+        Write-Host "`nNo reboot required." -ForegroundColor Green
+    }
+
+    # Define unwanted software patterns
+    $unwantedSoftwarePatterns = @("*Chicken Invaders*", "*HashCat*")
+
+    # Define directories to scan
+    $directoriesToScan = @("C:\Program Files", "C:\Program Files (x86)", "C:\Users")
+
+    foreach ($directory in $directoriesToScan) {
+        foreach ($pattern in $unwantedSoftwarePatterns) {
+            try {
+                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
+                foreach ($file in $files) {
+                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                    Write-Host "Removed unwanted software: $($file.FullName)" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
+            }
+        }
+    }
+    Write-Host "`n--- Unwanted Software Cleanup Completed ---`n" -ForegroundColor Cyan
 }
 
 function Malware {
@@ -842,19 +1175,44 @@ function Malware {
         Write-Host "Ensuring real-time protection is enabled..." -ForegroundColor Yellow
         Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
+        # Ensure Windows Defender service is running
+        Write-Host "Ensuring Windows Defender service is running..." -ForegroundColor Yellow
+        $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue
+        if ($defenderService -and $defenderService.Status -ne "Running") {
+            try {
+                Start-Service -Name "WinDefend" -ErrorAction Stop
+                Write-Host "Windows Defender service started successfully." -ForegroundColor Green
+            } catch {
+                Write-Host "Failed to start Windows Defender service: $($_.Exception.Message)" -ForegroundColor Red
+                return
+            }
+        }
+
         # Run quick system scan
         Write-Host "Running quick system scan. This may take some time..." -ForegroundColor Yellow
-        Start-MpScan -ScanType QuickScan 
+        # Enhanced error handling for Start-MpScan
+        try {
+            Start-MpScan -ScanType QuickScan
+        } catch {
+            Write-Host "Failed to start malware scan. Please ensure Windows Defender is enabled and no other antivirus software is interfering." -ForegroundColor Red
+            Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Yellow
+            return
+        }
 
         # Get detected threats
         $threats = Get-MpThreatDetection
 
-        if ($threats) {
+        if ($threats -and $threats.Count -gt 0) {
             Write-Host "Detected threats found. Removing..." -ForegroundColor Red
             $threats | ForEach-Object {
-                Remove-MpThreat -ThreatID $_.ThreatID -ErrorAction SilentlyContinue
+                try {
+                    Remove-MpThreat -ThreatID $_.ThreatID -ErrorAction Stop
+                    Write-Host "Removed threat: $($_.ThreatName)" -ForegroundColor Green
+                } catch {
+                    Write-Host "Failed to remove threat: $($_.ThreatName) - $($_.Exception.Message)" -ForegroundColor Yellow
+                }
             }
-            Write-Host "All detected threats have been removed." -ForegroundColor Green
+            Write-Host "All detected threats have been processed." -ForegroundColor Green
         } else {
             Write-Host "No malware detected." -ForegroundColor Green
         }
@@ -864,15 +1222,209 @@ function Malware {
     catch {
         Write-Host "Error during malware scan: $_" -ForegroundColor Red
     }
+    
+    # Define backdoor patterns
+    $backdoorPatterns = @("*backdoor*", "*remoteadmin*", "*rat*")
+
+    # Define directories to scan
+    $directoriesToScan = @("C:\Windows", "C:\Program Files", "C:\Program Files (x86)", "C:\Users")
+
+    foreach ($directory in $directoriesToScan) {
+        foreach ($pattern in $backdoorPatterns) {
+            try {
+                $files = Get-ChildItem -Path $directory -Recurse -Filter $pattern -ErrorAction SilentlyContinue
+                foreach ($file in $files) {
+                    Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                    Write-Host "Removed backdoor: $($file.FullName)" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "Failed to remove files matching pattern '$pattern' in directory '$directory': $_" -ForegroundColor Red
+            }
+        }
+    }
+    # Configuration =================
+$logFile = "C:\Temp\NetcatRemoval.log"
+$ncNames = "nc.exe","ncat.exe"
+
+# Ensure log folder exists
+if (-not (Test-Path "C:\Temp")) { New-Item -Path "C:\Temp" -ItemType Directory -Force }
+
+# Clear previous log
+if (Test-Path $logFile) { Remove-Item $logFile -Force }
+
+Write-Host "=== Starting Netcat Backdoor Removal ===" -ForegroundColor Cyan
+
+# Stop running Netcat processes =================
+Write-Host "`n[1] Detecting running Netcat processes..." -ForegroundColor Yellow
+$ncProcesses = Get-Process | Where-Object { $ncNames -contains $_.Name.ToLower() }
+
+foreach ($proc in $ncProcesses) {
+    try {
+        Write-Host "Stopping process: $($proc.Name) (PID: $($proc.Id))"
+        Stop-Process -Id $proc.Id -Force
+        Add-Content -Path $logFile -Value "Stopped process: $($proc.Name) (PID: $($proc.Id))"
+    } catch {
+        Write-Host "Failed to stop process: $($proc.Name) (PID: $($proc.Id))" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to stop process: $($proc.Name) (PID: $($proc.Id))"
+    }
 }
 
-# Usage:
-# To run the malware scan, simply type:
-# Malware
+# Find and remove Netcat executables =================
+Write-Host "`n[2] Searching for Netcat executables..." -ForegroundColor Yellow
+foreach ($name in $ncNames) {
+    $files = Get-ChildItem -Path C:\ -Recurse -Include $name -ErrorAction SilentlyContinue
+    foreach ($file in $files) {
+        try {
+            Write-Host "Deleting executable: $($file.FullName)"
+            Remove-Item -Path $file.FullName -Force
+            Add-Content -Path $logFile -Value "Deleted executable: $($file.FullName)"
+        } catch {
+            Write-Host "Failed to delete: $($file.FullName)" -ForegroundColor Red
+            Add-Content -Path $logFile -Value "Failed to delete: $($file.FullName)"
+        }
+    }
+}
 
-#local policie
+#  Remove persistence from Startup folders =================
+Write-Host "`n[3] Checking Startup folders..." -ForegroundColor Yellow
+$startupPaths = @(
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup",
+    "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+)
+
+foreach ($path in $startupPaths) {
+    $files = Get-ChildItem -Path $path -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $ncNames -contains $_.Name.ToLower() }
+    foreach ($file in $files) {
+        try {
+            Write-Host "Deleting startup file: $($file.FullName)"
+            Remove-Item -Path $file.FullName -Force
+            Add-Content -Path $logFile -Value "Deleted startup file: $($file.FullName)"
+        } catch {
+            Write-Host "Failed to delete startup file: $($file.FullName)" -ForegroundColor Red
+            Add-Content -Path $logFile -Value "Failed to delete startup file: $($file.FullName)"
+        }
+    }
+}
+
+# Remove registry Run entries =================
+Write-Host "`n[4] Checking Registry Run keys..." -ForegroundColor Yellow
+$regPaths = @(
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+)
+
+foreach ($reg in $regPaths) {
+    try {
+        $props = Get-ItemProperty -Path $reg -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+        foreach ($prop in $props) {
+            $val = (Get-ItemProperty -Path $reg -Name $prop -ErrorAction SilentlyContinue).$prop
+            if ($ncNames | ForEach-Object { $val -like "*$_*" }) {
+                Write-Host "Removing registry entry: $prop = $val"
+                Remove-ItemProperty -Path $reg -Name $prop -Force
+                Add-Content -Path $logFile -Value "Removed registry entry: $prop = $val"
+            }
+        }
+    } catch {
+        Write-Host "Cannot access registry path: $reg" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to access registry: $reg"
+    }
+}
+
+# Remove scheduled tasks =================
+Write-Host "`n[5] Checking Scheduled Tasks..." -ForegroundColor Yellow
+$tasks = Get-ScheduledTask | Where-Object { $_.TaskName -like "*nc*" -or $_.TaskPath -like "*nc*" }
+foreach ($task in $tasks) {
+    try {
+        Write-Host "Deleting scheduled task: $($task.TaskName)"
+        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false
+        Add-Content -Path $logFile -Value "Deleted scheduled task: $($task.TaskName)"
+    } catch {
+        Write-Host "Failed to delete scheduled task: $($task.TaskName)" -ForegroundColor Red
+        Add-Content -Path $logFile -Value "Failed to delete scheduled task: $($task.TaskName)"
+    }
+}
+
+Write-Host "`n=== Netcat Removal Complete ===" -ForegroundColor Green
+Write-Host "Check log file: $logFile" -ForegroundColor Cyan
+
+     Write-Host "`n--- Malware Removal Completed ---`n" -ForegroundColor Cyan
+}
+
+
+# --- Application Security Settings ---
 function Application-Security-Settings {
     Write-Host "`n--- Applying Application Security Settings ---`n" -ForegroundColor Cyan
+    try {
+        # Block App Execution from Temp & Downloads (ASR rules must be set via GPO or Defender)
+        Write-Host "Blocking execution from Temp and Downloads folders (manual ASR rule required)..." -ForegroundColor Yellow
+        # Enable SmartScreen for Microsoft Store apps
+        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin" -Force
+        # Enable SmartScreen for Edge
+        $edgeSmartScreenPath = "HKCU:\Software\Microsoft\Edge"
+        if (-not (Test-Path $edgeSmartScreenPath)) { New-Item -Path $edgeSmartScreenPath -Force | Out-Null }
+        Set-ItemProperty -Path $edgeSmartScreenPath -Name "SmartScreenEnabled" -Value 1 -Force
+        # Enable Controlled Folder Access
+        Set-MpPreference -EnableControlledFolderAccess Enabled
+        # Disallow unsigned PowerShell scripts
+        try {
+            $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
+            if ($currentPolicy -ne "AllSigned") {
+                Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
+                Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
+            }
+        } catch { Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow }
+        # Ask to install or remove Internet Explorer
+        $ieChoice = Read-Host "Install or Remove Internet Explorer? [Install/Remove/Skip]"
+        if ($ieChoice -eq "Install") {
+            Enable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+        } elseif ($ieChoice -eq "Remove") {
+            Disable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+        }
+        # Enable Firefox Popup Blocker
+        $firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
+        if (Test-Path $firefoxPrefsPath) {
+            $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
+            foreach ($prefsFile in $prefsFiles) {
+                $lines = Get-Content $prefsFile | Where-Object { $_ -notmatch "dom\.disable_open_during_load" }
+                $lines += 'user_pref("dom.disable_open_during_load", true);'
+                $lines | Set-Content $prefsFile
+            }
+        }
+        Write-Host "`n--- Application Security Settings Applied ---`n" -ForegroundColor Cyan
+    } catch { Write-Host "Error applying application security settings: $_" -ForegroundColor Red }
+}
+
+# --- Main Menu Loop ---
+$completedOptions = @()
+menu: do {
+    Write-Host "`nSelect an option:`n"
+    for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+        if ($completedOptions -contains $menuOptions[$i]) {
+            Write-Host "$($i + 1). $($menuOptions[$i])" -ForegroundColor $EmphasizedNameColor
+        } else {
+            Write-Host "$($i + 1). $($menuOptions[$i])"
+        }
+    }
+    $selection = Read-Host "`nEnter the number of your choice"
+    switch ($selection) {
+        "1"  { Document-System; $completedOptions += $menuOptions[0] }
+        "2"  { Enable-Updates; $completedOptions += $menuOptions[1] }
+        "3"  { AuditUsers; $completedOptions += $menuOptions[2] }
+        "4"  { Account-Policies; $completedOptions += $menuOptions[3] }
+        "5"  { Local-Policies; $completedOptions += $menuOptions[4] }
+        "6"  { EnableDefensiveCountermeasures; $completedOptions += $menuOptions[5] }
+        "7"  { UncategorizedOSSettings; $completedOptions += $menuOptions[6] }
+        "8"  { Service-Auditing; $completedOptions += $menuOptions[7] }
+        "9"  { OS-Updates; $completedOptions += $menuOptions[8] }
+        "10" { Application-Updates; $completedOptions += $menuOptions[9] }
+        "11" { Prohibited-Files; $completedOptions += $menuOptions[10] }
+        "12" { Unwanted-Software; $completedOptions += $menuOptions[11] }
+        "13" { Malware; $completedOptions += $menuOptions[12] }
+        "14" { Application-Security-Settings; $completedOptions += $menuOptions[13] }
+        "15" { Write-Host "`nExiting..."; break menu }
+        default { Write-Host "`nInvalid selection. Please try again." -ForegroundColor $WarningColor }
+    }
+} while ($true)
 
     try {
         # Block App Execution from Temp & Downloads
@@ -882,7 +1434,7 @@ function Application-Security-Settings {
             @{ Id = "3B576869-A4EC-4529-8536-B80A7769E899"; Path = "$env:TEMP\*"; }
         )
         foreach ($rule in $rules) {
-            Add-MpPreference -AttackSurfaceReductionOnlyExclusions $rule.Path -ErrorAction SilentlyContinue
+            Write-Host "Attack Surface Reduction rules must be configured manually for path exclusions: $($rule.Path)" -ForegroundColor Yellow
         }
 
         # Enable SmartScreen for Microsoft Store apps
@@ -891,7 +1443,11 @@ function Application-Security-Settings {
 
         # Enable SmartScreen for Edge
         Write-Host "Enabling SmartScreen for Microsoft Edge..." -ForegroundColor Yellow
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Edge\SmartScreenEnabled" -Name "Enabled" -Value 1 -Force
+        $edgeSmartScreenPath = "HKCU:\Software\Microsoft\Edge"
+        if (-not (Test-Path $edgeSmartScreenPath)) {
+            New-Item -Path $edgeSmartScreenPath -Force | Out-Null
+        }
+        Set-ItemProperty -Path "$edgeSmartScreenPath" -Name "SmartScreenEnabled" -Value 1 -Force
 
         # Enable SmartScreen for Windows
         Write-Host "Enabling SmartScreen for Windows..." -ForegroundColor Yellow
@@ -901,7 +1457,7 @@ function Application-Security-Settings {
         Write-Host "Enabling Controlled Folder Access..." -ForegroundColor Yellow
         Set-MpPreference -EnableControlledFolderAccess Enabled
 
-        # Disallow unsigned PowerShell scripts (own try/catch block)
+        # Disallow unsigned PowerShell scripts
         Write-Host "Checking PowerShell execution policy..." -ForegroundColor Yellow
         try {
             $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine
@@ -909,52 +1465,55 @@ function Application-Security-Settings {
                 Write-Host "Setting PowerShell execution policy to AllSigned..." -ForegroundColor Yellow
                 Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force
                 Write-Host "Execution policy set to AllSigned." -ForegroundColor Green
-            }
-            else {
+            } else {
                 Write-Host "Execution policy is already AllSigned." -ForegroundColor Green
             }
-        }
-        catch {
+        } catch {
             Write-Host "Skipping execution policy change due to Group Policy override." -ForegroundColor Yellow
         }
 
-        # --- Remove Internet Explorer ---
-        Write-Host "Checking for Internet Explorer installation..." -ForegroundColor Yellow
-        $ieFeature = Get-WindowsOptionalFeature -Online | Where-Object FeatureName -like "*Internet-Explorer*"
-        if ($ieFeature -and $ieFeature.State -eq "Enabled") {
-            Write-Host "Internet Explorer is installed. Removing now (restart required)..." -ForegroundColor Red
-            Disable-WindowsOptionalFeature -FeatureName $ieFeature.FeatureName -Online -Restart -ErrorAction SilentlyContinue
-        }
-        elseif ($ieFeature -and $ieFeature.State -eq "Disabled") {
-            Write-Host "Internet Explorer is already disabled." -ForegroundColor Green
-        }
-        else {
-            Write-Host "Internet Explorer feature not found on this system." -ForegroundColor Green
+        # Ask to install or remove Internet Explorer
+        Write-Host "Do you want to install or remove Internet Explorer? [Install/Remove/Skip]" -ForegroundColor Yellow
+        $ieChoice = Read-Host "Enter your choice"
+        if ($ieChoice -eq "Install") {
+            Write-Host "Installing Internet Explorer..." -ForegroundColor Yellow
+            Enable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+            Write-Host "Internet Explorer installed successfully." -ForegroundColor Green
+        } elseif ($ieChoice -eq "Remove") {
+            Write-Host "Removing Internet Explorer..." -ForegroundColor Yellow
+            Disable-WindowsOptionalFeature -FeatureName Internet-Explorer-Optional-amd64 -Online -NoRestart
+            Write-Host "Internet Explorer removed successfully." -ForegroundColor Green
+        } else {
+            Write-Host "Skipped Internet Explorer configuration." -ForegroundColor Yellow
         }
 
-        # Disable SMB1 protocol
-        Write-Host "Disabling SMB1 protocol (restart required)..." -ForegroundColor Yellow
-        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -Restart -ErrorAction SilentlyContinue
-        Write-Host "SMB1 protocol disabled (if it was enabled)." -ForegroundColor Green
+        # Enable Firefox Popup Blocker
+Write-Host "Enabling Firefox Popup Blocker (setting dom.disable_open_during_load to true)..." -ForegroundColor Yellow
 
-        # Disable Ctrl+Alt+Del requirement
-        Write-Host "Disabling Ctrl+Alt+Del requirement at login..." -ForegroundColor Yellow
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1 -Type DWord
-        Write-Host "Ctrl+Alt+Del requirement disabled successfully." -ForegroundColor Green
+$firefoxPrefsPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
 
-        Write-Host "`nApplication security settings applied successfully." -ForegroundColor Green
+if (Test-Path $firefoxPrefsPath) {
+    $prefsFiles = Get-ChildItem -Path $firefoxPrefsPath -Filter "prefs.js" -Recurse
+
+    foreach ($prefsFile in $prefsFiles) {
+        # Read all lines except existing dom.disable_open_during_load entries
+        $lines = Get-Content $prefsFile | Where-Object { $_ -notmatch "dom\.disable_open_during_load" }
+
+        # Add the line to enable popup blocker explicitly
+        $lines += 'user_pref("dom.disable_open_during_load", true);'
+
+        # Write the updated content back to the prefs.js file
+        $lines | Set-Content $prefsFile
+
+        Write-Host "Enabled Firefox popup blocker in: $($prefsFile.FullName)" -ForegroundColor Green
     }
-    catch {
+} else {
+    Write-Host "Firefox preferences not found. Skipping popup blocker configuration." -ForegroundColor Yellow
+}
+        Write-Host "`n--- Application Security Settings Applied ---`n" -ForegroundColor Cyan
+    } catch {
         Write-Host "Error applying application security settings: $_" -ForegroundColor Red
     }
-}
-
-
-# Function is now defined but NOT executed automatically
-# To run it manually, type:
-# Application-Security-Settings
-
-
 
 # Define a list to track completed options
 $completedOptions = @()
@@ -984,7 +1543,7 @@ do {
             $completedOptions += $menuOptions[1]  # Mark as completed
         }
         "3"  { 
-            User-Auditing 
+            AuditUsers 
             $completedOptions += $menuOptions[2]  # Mark as completed
         }
         "4"  { 
@@ -996,11 +1555,11 @@ do {
             $completedOptions += $menuOptions[4]  # Mark as completed
         }
         "6"  { 
-            Defensive-Countermeasures 
+            EnableDefensiveCountermeasures 
             $completedOptions += $menuOptions[5]  # Mark as completed
         }
         "7"  { 
-            Uncategorized-OS-Settings 
+            UncategorizedOSSettings 
             $completedOptions += $menuOptions[6]  # Mark as completed
         }
         "8"  { 
@@ -1041,14 +1600,3 @@ do {
     }
 }
  while ($true)
-# End of script 
-#Changed
-#Chnanged again
-#change
-#merge
-#YIPPIE
-#yo
-#yo
-#rur
-#yippie
-#k
