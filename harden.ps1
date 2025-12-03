@@ -9,7 +9,7 @@ $EmphasizedNameColor = "Green"   # Color for emphasized names
 $KeptLineColor = "DarkYellow"    # Color for kept lines
 $RemovedLineColor = "Red"        # Color for removed lines
 $WarningColor = "Red"            # Color for warnings
-# ===== Variables Section End =====
+# ===== Variables Section End ======
 
 # Check for admin rights and relaunch as admin if needed
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
